@@ -982,15 +982,6 @@ html[data-surface="tray"] #root {
     padding: 20px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
-  }
-}
 
 /* Real credential data shares one native session across both windows. */
 .credential-card header > span,

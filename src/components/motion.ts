@@ -1,8 +1,5 @@
 export function dismissSurface(element: HTMLElement | null, done: () => void) {
-  if (
-    !element ||
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) {
+  if (!element) {
     done();
     return null;
   }

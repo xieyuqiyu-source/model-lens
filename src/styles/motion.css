@@ -409,13 +409,3 @@ button:not(:disabled):active {
     background: #ffffff12;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after,
-  *::backdrop {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
-  }
-}
