@@ -1,4 +1,5 @@
 mod local_connection;
+mod mutations;
 mod quota;
 mod transport;
 use reqwest::Method;
@@ -21,6 +22,9 @@ pub struct Credential {
     pub provider: String,
     pub enabled: bool,
     pub editable: bool,
+    pub deletable: bool,
+    pub file_name: String,
+    pub delete_token: String,
     pub supported: bool,
     pub five: Option<f64>,
     pub week: Option<f64>,
@@ -102,6 +106,7 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
         let email = text(item, "email");
         let supported = matches!(provider.as_str(), "codex" | "claude") && !auth_index.is_empty();
         // Never expose `account`, raw tokens, paths or arbitrary server fields to the webview.
+        let deletable = mutations::file_backed(item, &name);
         let row = Credential {
             id: id.clone(),
             name: if email.is_empty() {
@@ -115,6 +120,13 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
             editable: item["disabled"].is_boolean()
                 && !item["runtime_only"].as_bool().unwrap_or(false),
             supported,
+            deletable,
+            file_name: if deletable {
+                name.clone()
+            } else {
+                String::new()
+            },
+            delete_token: mutations::delete_token(item),
             ..Credential::default()
         };
         let account_id = text(&item["id_token"], "chatgpt_account_id");
@@ -173,15 +185,23 @@ impl Session {
         self.snapshot.stale = false;
         Ok(())
     }
+    fn quota_targets(&self, id: Option<String>) -> Vec<String> {
+        match id {
+            Some(id) => vec![id],
+            None => self
+                .records
+                .iter()
+                .filter(|(_, r)| r.row.supported)
+                .map(|(id, _)| id.clone())
+                .collect(),
+        }
+    }
     fn quota(&mut self, id: &str) -> Result<(), String> {
         let record = self
             .records
             .get(id)
             .ok_or("凭证已不存在，请刷新列表")?
             .clone();
-        if !record.row.enabled {
-            return Err("凭证已停用，未查询额度".into());
-        }
         match quota::fetch(self.api.as_ref().ok_or("请先连接管理接口")?, &record) {
             Ok(row) => {
                 self.records.get_mut(id).unwrap().row = row;
@@ -326,15 +346,7 @@ pub async fn credential_toggle(
 pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<Snapshot, String> {
     operate(app, move |s, app| {
         s.reload()?;
-        let ids = match id {
-            Some(id) => vec![id],
-            None => s
-                .records
-                .iter()
-                .filter(|(_, r)| r.row.enabled && r.row.supported)
-                .map(|(id, _)| id.clone())
-                .collect(),
-        };
+        let ids = s.quota_targets(id);
         let mut failed = 0;
         for id in ids {
             if s.quota(&id).is_err() {
@@ -352,3 +364,20 @@ pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<
 }
 #[cfg(test)]
 mod tests;
+
+#[tauri::command]
+pub async fn credential_import(
+    app: tauri::AppHandle,
+    name: String,
+    contents: String,
+) -> Result<Snapshot, String> {
+    operate(app, move |s, _| s.import_credential(&name, &contents)).await
+}
+#[tauri::command]
+pub async fn credential_delete(
+    app: tauri::AppHandle,
+    id: String,
+    expected: String,
+) -> Result<Snapshot, String> {
+    operate(app, move |s, _| s.delete_credential(&id, &expected)).await
+}

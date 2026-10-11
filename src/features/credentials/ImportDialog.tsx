@@ -1,24 +1,76 @@
+import { useRef, useState } from "react";
 import { Modal } from "../../components/Common";
-export function ImportDialog({ onClose }: { onClose: () => void }) {
+import type { CredentialsState } from "./useCredentials";
+
+const maxBytes = 1024 * 1024;
+export function ImportDialog({ state, onClose }: { state: CredentialsState; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const paste = useRef<HTMLTextAreaElement>(null);
+  const submitting = useRef(false);
+  const blocked = reading || state.busy || !state.connected || state.stale;
   return (
     <Modal title="导入 JSON 凭证" onClose={onClose}>
-      <textarea
-        className="json-input"
-        readOnly
-        aria-label="JSON 导入预览"
-        value={'{\n  "type": "example",\n  "account": "your-account"\n}'}
-      />
-      <p className="notice">
-        JSON 导入尚未开放，请勿输入真实凭证。
-      </p>
-      <div className="modal-actions">
-        <button className="button" disabled>
-          选择文件
-        </button>
-        <button className="button primary" disabled>
-          校验并导入
-        </button>
-      </div>
+      {(dismiss) => (
+        <form className="connection-form" onSubmit={async (event) => {
+          event.preventDefault();
+          if (blocked || submitting.current) return;
+          submitting.current = true;
+          setReading(true);
+          setError("");
+          try {
+            const contents = file ? await file.text() : paste.current?.value || "";
+            if (!contents || new TextEncoder().encode(contents).length > maxBytes) {
+              setError("JSON 不能为空，且不能超过 1 MiB");
+              return;
+            }
+            if (await state.importCredential(name, contents)) {
+              if (paste.current) paste.current.value = "";
+              setFile(null);
+              dismiss();
+            }
+          } catch {
+            setError("无法读取所选文件，请重新选择");
+          } finally {
+            submitting.current = false;
+            setReading(false);
+          }
+        }}>
+          <p className="muted">选择单个凭证文件，或粘贴 CLIProxy 凭证 JSON。导入后由 CLIProxy 保存，发现同名文件会停止导入。</p>
+          <label>文件名
+            <input aria-label="凭证文件名" required value={name} disabled={blocked} placeholder="account.json" autoComplete="off" spellCheck={false} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <input ref={fileInput} type="file" accept=".json,application/json" aria-label="选择 JSON 文件" hidden disabled={blocked} onChange={(e) => {
+            const selected = e.target.files?.[0];
+            e.target.value = "";
+            if (!selected) return;
+            if (selected.size > maxBytes || !selected.size) {
+              setFile(null);
+              setName("");
+              setError("文件不能为空，且不能超过 1 MiB");
+              return;
+            }
+            setError("");
+            setFile(selected);
+            setName(selected.name);
+            if (paste.current) paste.current.value = "";
+          }} />
+          {file ? <div className="saved-connection import-file">
+            <p>已选择：{file.name}（{Math.ceil(file.size / 1024)} KiB）</p>
+            <button type="button" className="text-button" disabled={blocked} onClick={() => setFile(null)}>移除文件，改为粘贴</button>
+          </div> : <textarea ref={paste} className="json-input" aria-label="凭证 JSON" placeholder="粘贴完整凭证 JSON，需包含 type 字段" maxLength={maxBytes} required disabled={blocked} autoComplete="off" spellCheck={false} />}
+          {!state.connected && <p className="notice">请先连接本机管理接口</p>}
+          {state.stale && <p className="notice">当前列表待核实，请关闭弹窗并刷新列表</p>}
+          {(error || state.error) && <p className="notice" role="alert">{error || state.error}</p>}
+          <div className="modal-actions">
+            <button type="button" className="button" disabled={blocked} onClick={() => fileInput.current?.click()}>选择文件</button>
+            <button type="submit" className="button primary" disabled={blocked}>{reading ? "导入中…" : "校验并导入"}</button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

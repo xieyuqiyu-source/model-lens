@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import "./credentials.css";
+import { useState, type CSSProperties } from "react";
 import {
   ArrowUpRight,
   PanelTop,
@@ -8,8 +9,10 @@ import {
   ListRestart,
 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { activeCredentialsFirst, resetLabel, type Credential } from "./data";
+import { activeCredentialsFirst, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
+import { CredentialCard } from "./CredentialCard";
+import { DeleteDialog } from "./DeleteDialog";
 type Props = {
   state: CredentialsState;
   expanded: boolean;
@@ -19,39 +22,6 @@ type Props = {
   onExpand: () => void;
   onTray: () => void;
 };
-function Quota({
-  label,
-  value,
-  reset,
-}: {
-  label: string;
-  value: number | null;
-  reset: string;
-}) {
-  return (
-    <div className={`quota ${label === "1w" ? "weekly" : ""}`}>
-      <div className="quota-label">
-        <span>{label}</span>
-        <span>{value === null ? "未提供" : `${value}% 剩余`}</span>
-      </div>
-      <div
-        className="track"
-        role={value === null ? "img" : "meter"}
-        aria-label={`${label} 剩余额度`}
-        {...(value === null
-          ? {}
-          : {
-              "aria-valuenow": value,
-              "aria-valuemin": 0,
-              "aria-valuemax": 100,
-            })}
-      >
-        <span style={{ width: `${value ?? 0}%` }} />
-      </div>
-      <span className="quota-reset">{resetLabel(reset)}</span>
-    </div>
-  );
-}
 function disabled(state: CredentialsState, c: Credential) {
   return state.busy || state.stale || !c.editable;
 }
@@ -84,7 +54,7 @@ export function CredentialRows({
             data-quota={c.five === null && c.week === null ? "missing" : "known"}
             data-error={Boolean(c.quotaError)}
             style={{ "--quota-width": `${c.five ?? c.week ?? 0}%` } as CSSProperties}
-            title={`${c.name} · ${c.provider} · ${c.quotaError || (c.five !== null ? `5h 剩余 ${c.five}%` : c.week !== null ? `1w 剩余 ${c.week}%` : !c.enabled ? "已停用，额度未刷新" : !c.supported ? "此厂商额度暂未适配" : "额度尚未查询")}`}
+            title={`${c.name} · ${c.provider} · ${c.quotaError || (c.five !== null ? `5h 剩余 ${c.five}%` : c.week !== null ? `1w 剩余 ${c.week}%` : !c.enabled ? "已停用，仍可查询额度" : !c.supported ? "此厂商额度暂未适配" : "额度尚未查询")}`}
           >
             <span className="account-fill" />
             <span className="account-label">{c.name}</span>
@@ -102,7 +72,7 @@ export function CredentialRows({
               c.quotaError || (!c.supported ? "此厂商额度暂未适配" : "刷新额度")
             }
             aria-label={`刷新 ${c.name} 额度`}
-            disabled={state.busy || !c.supported || !c.enabled || state.stale}
+            disabled={state.busy || !c.supported || state.stale}
             onClick={() => void state.refreshQuota(c.id)}
           >
             <RefreshCw className={state.busy ? "spin" : ""} />
@@ -120,6 +90,7 @@ export function CredentialRows({
 }
 export function Credentials(p: Props) {
   const s = p.state;
+  const [deleting, setDeleting] = useState<Credential | null>(null);
   return (
     <section
       className={`credentials ${p.expanded ? "expanded" : ""}`}
@@ -165,7 +136,7 @@ export function Credentials(p: Props) {
                 <RefreshCw size={13} className={s.busy ? "spin" : ""} />
                 {s.busy ? "处理中…" : "刷新全部额度"}
               </button>
-              <button className="button" onClick={p.onImport}>
+              <button className="button" disabled={!s.connected || s.busy || s.stale} onClick={p.onImport}>
                 导入 JSON
               </button>
             </>
@@ -187,67 +158,7 @@ export function Credentials(p: Props) {
         <>
           <div className="credential-grid">
             {s.credentials.map((c) => (
-              <article
-                className={`credential-card ${!c.enabled ? "off" : ""}`}
-                key={c.id}
-              >
-                <header>
-                  <Brand name={c.brand} />
-                  <span title={c.name}>{c.name}</span>
-                  <Toggle
-                    on={c.enabled}
-                    label={`${c.name} 凭证开关`}
-                    disabled={disabled(s, c)}
-                    onChange={() => void s.toggle(c.id)}
-                  />
-                </header>
-                <Quota label="5h" value={c.five} reset={c.resetFive} />
-                <Quota label="1w" value={c.week} reset={c.resetWeek} />
-                <div className="card-meta">
-                  <div>
-                    <span>厂商</span>
-                    <p>{c.provider || "未知"}</p>
-                  </div>
-                  <div>
-                    <span>额度更新</span>
-                    <p>
-                      {c.quotaAt
-                        ? new Date(c.quotaAt * 1000).toLocaleTimeString(
-                            "zh-CN",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )
-                        : "尚未查询"}
-                    </p>
-                  </div>
-                </div>
-                <p
-                  className={`quota-message ${c.quotaError ? "has-error" : ""}`}
-                >
-                  {c.quotaError
-                    ? `${c.quotaError}${c.quotaAt ? "（仍显示上次数据）" : ""}`
-                    : !c.supported
-                      ? "此厂商额度暂未适配"
-                      : !c.enabled
-                        ? "已停用，额度未自动刷新"
-                        : c.quotaAt
-                          ? "额度以服务商返回为准"
-                          : "点击刷新获取真实额度"}
-                </p>
-                <footer>
-                  <button
-                    className="text-button"
-                    disabled={s.busy || s.stale || !c.supported || !c.enabled}
-                    onClick={() => void s.refreshQuota(c.id)}
-                  >
-                    <RefreshCw size={13} />
-                    刷新额度
-                  </button>
-                  <button className="text-button" onClick={p.preview}>
-                    单独检测
-                    <ArrowUpRight size={12} />
-                  </button>
-                </footer>
-              </article>
+              <CredentialCard key={c.id} c={c} state={s} preview={p.preview} onDelete={setDeleting} />
             ))}
           </div>
           <div className="section-foot">
@@ -259,7 +170,7 @@ export function Credentials(p: Props) {
         <>
           <CredentialRows state={s} onConnect={p.onConnect} />
           <div className="batch">
-            <span className="muted">仅刷新启用且支持的凭证</span>
+            <span className="muted">刷新所有支持的凭证，包含已停用账号</span>
             <button
               className="button"
               disabled={!s.connected || s.busy || s.stale}
@@ -278,6 +189,7 @@ export function Credentials(p: Props) {
           </span>
         </>
       )}
+      {deleting && <DeleteDialog credential={deleting} state={s} onClose={() => setDeleting(null)} />}
     </section>
   );
 }

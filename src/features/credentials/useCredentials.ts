@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { native } from "../service/api";
 import { managementApi } from "./api";
-import type { ManagementSnapshot } from "./data";
+import type { Credential, ManagementSnapshot } from "./data";
 const empty: ManagementSnapshot = {
   connected: false,
   saved: false,
@@ -18,6 +18,7 @@ export function useCredentials() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const mounted = useRef(true);
+  const pendingRef = useRef(false);
   const apply = useCallback((next: ManagementSnapshot) => {
     if (mounted.current)
       setSnapshot((old) => (next.revision >= old.revision ? next : old));
@@ -56,6 +57,8 @@ export function useCredentials() {
       setError("请在 ModelLens 应用内连接本机服务");
       return false;
     }
+    if (pendingRef.current) return false;
+    pendingRef.current = true;
     setPending(true);
     setError("");
     try {
@@ -63,9 +66,10 @@ export function useCredentials() {
       apply(result);
       return !result.error;
     } catch {
-      if (mounted.current) setError("操作未完成，请刷新列表核实，不要重复切换");
+      if (mounted.current) setError("操作未完成，请刷新列表核实，不要重复提交");
       return false;
     } finally {
+      pendingRef.current = false;
       if (mounted.current) setPending(false);
     }
   };
@@ -81,6 +85,10 @@ export function useCredentials() {
     refresh: () => run(managementApi.list),
     refreshQuota: (id: string | null = null) =>
       run(() => managementApi.quota(id)),
+    importCredential: (name: string, contents: string) =>
+      run(() => managementApi.importCredential(name, contents)),
+    deleteCredential: (row: Credential) =>
+      run(() => managementApi.deleteCredential(row.id, row.deleteToken)),
     toggle: (id: string) => {
       const row = snapshot.credentials.find((c) => c.id === id);
       if (row)

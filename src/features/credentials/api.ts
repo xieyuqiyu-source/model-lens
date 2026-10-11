@@ -10,6 +10,10 @@ export const managementApi = {
   list: () => invoke<ManagementSnapshot>("credentials_list"),
   toggle: (id: string, expected: boolean, enabled: boolean) =>
     invoke<ManagementSnapshot>("credential_toggle", { id, expected, enabled }),
+  importCredential: (name: string, contents: string) =>
+    invoke<ManagementSnapshot>("credential_import", { name, contents }),
+  deleteCredential: (id: string, expected: string) =>
+    invoke<ManagementSnapshot>("credential_delete", { id, expected }),
   quota: (id: string | null = null) =>
     invoke<ManagementSnapshot>("quota_refresh", { id }),
 };

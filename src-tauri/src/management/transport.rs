@@ -21,6 +21,7 @@ impl Api {
         let client = Client::builder()
             .no_proxy()
             .redirect(Policy::none())
+            .retry(reqwest::retry::never())
             .connect_timeout(Duration::from_secs(3))
             .timeout(Duration::from_secs(25))
             .build()
@@ -33,6 +34,15 @@ impl Api {
         })
     }
     pub fn call(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Value, String> {
+        self.call_with_query(method, path, &[], body)
+    }
+    pub fn call_with_query(
+        &self,
+        method: Method,
+        path: &str,
+        query: &[(&str, &str)],
+        body: Option<&Value>,
+    ) -> Result<Value, String> {
         let base = if self.legacy {
             "/v0/management"
         } else {
@@ -48,13 +58,13 @@ impl Api {
         } else {
             path
         };
-        let mut request = self
-            .client
-            .request(
-                method,
-                format!("http://127.0.0.1:{}{}{}", self.port, base, path),
-            )
-            .bearer_auth(&self.key);
+        let mut url =
+            reqwest::Url::parse(&format!("http://127.0.0.1:{}{}{}", self.port, base, path))
+                .map_err(|_| "本机管理请求地址无效")?;
+        if !query.is_empty() {
+            url.query_pairs_mut().extend_pairs(query.iter().copied());
+        }
+        let mut request = self.client.request(method, url).bearer_auth(&self.key);
         if let Some(body) = body {
             request = request.json(body);
         }
@@ -78,6 +88,9 @@ impl Api {
             .map_err(|_| "读取服务响应失败")?;
         if bytes.len() > 4 * 1024 * 1024 {
             return Err("响应过大，已停止读取".into());
+        }
+        if bytes.is_empty() {
+            return Ok(Value::Null);
         }
         serde_json::from_slice(&bytes).map_err(|_| "服务未返回有效 JSON".into())
     }
