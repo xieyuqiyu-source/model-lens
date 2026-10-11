@@ -59,8 +59,8 @@ pub(super) fn delete_token(item: &Value) -> String {
     format!("{:016x}", hash.finish())
 }
 
-fn parse_import(name: &str, contents: &str) -> Result<Value, String> {
-    if !valid_name(name) {
+fn parse_import(name: &str, contents: &str) -> Result<(String, Value), String> {
+    if !name.is_empty() && !valid_name(name) {
         return Err("请输入不含目录的 .json 文件名，最多 240 字节".into());
     }
     if contents.is_empty() || contents.len() > MAX_IMPORT_BYTES {
@@ -78,21 +78,51 @@ fn parse_import(name: &str, contents: &str) -> Result<Value, String> {
     {
         return Err("请选择单个 CLIProxy 凭证对象，需包含有效的 type 字段".into());
     }
-    Ok(body)
+    let name = if name.is_empty() {
+        let email = body["email"].as_str().unwrap_or_default().trim();
+        let suffix = if email.is_empty() {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "无法生成文件名，请检查系统时间")?
+                .as_nanos();
+            format!("import-{stamp}")
+        } else {
+            email
+                .chars()
+                .take(160)
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '_' | '-' | '+') {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect()
+        };
+        format!("{provider}-{suffix}.json")
+    } else {
+        name.to_owned()
+    };
+    Ok((name, body))
 }
 
 impl Session {
     pub(super) fn import_credential(&mut self, name: &str, contents: &str) -> Result<(), String> {
-        let body = parse_import(name, contents)?;
+        let (name, body) = parse_import(name, contents)?;
         self.reload()?;
-        if self.records.values().any(|r| same_name(&r.name, name)) {
-            return Err("已存在同名凭证，未覆盖；请更换文件名后重新导入".into());
+        if self.records.values().any(|r| same_name(&r.name, &name)) {
+            return Err("已存在同名凭证，未覆盖；请核对已导入账号，或重命名文件后选择导入".into());
         }
         let write = self
             .api
             .as_ref()
             .ok_or("请先连接管理接口")?
-            .call_with_query(Method::POST, "/credentials", &[("name", name)], Some(&body));
+            .call_with_query(
+                Method::POST,
+                "/credentials",
+                &[("name", name.as_str())],
+                Some(&body),
+            );
         if self.reload().is_err() {
             return Err("导入结果未确认，请刷新列表核实；不要重复导入".into());
         }

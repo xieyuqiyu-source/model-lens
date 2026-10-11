@@ -1,3 +1,5 @@
+pub mod access;
+pub mod batch;
 mod local_connection;
 mod mutations;
 pub mod probe;
@@ -32,6 +34,10 @@ pub struct Credential {
     pub reset_five: String,
     pub reset_week: String,
     pub quota_items: Vec<quota::QuotaItem>,
+    pub plan: Option<String>,
+    pub reset_available: Option<u64>,
+    pub reset_count_at: Option<u64>,
+    pub reset_count_error: Option<String>,
     pub quota_at: Option<u64>,
     pub quota_error: Option<String>,
 }
@@ -139,6 +145,11 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
                 String::new()
             },
             delete_token: mutations::delete_token(item),
+            plan: if provider == "codex" {
+                quota::codex::plan(item)
+            } else {
+                None
+            },
             ..Credential::default()
         };
         let account_id = text(&item["id_token"], "chatgpt_account_id");
@@ -196,6 +207,12 @@ impl Session {
                 record.row.reset_five = old.row.reset_five.clone();
                 record.row.reset_week = old.row.reset_week.clone();
                 record.row.quota_items = old.row.quota_items.clone();
+                if record.row.plan.is_none() {
+                    record.row.plan = old.row.plan.clone();
+                }
+                record.row.reset_available = old.row.reset_available;
+                record.row.reset_count_at = old.row.reset_count_at;
+                record.row.reset_count_error = old.row.reset_count_error.clone();
                 record.row.quota_at = old.row.quota_at;
                 record.row.quota_error = old.row.quota_error.clone();
             }
@@ -232,13 +249,19 @@ impl Session {
             }
         }
     }
-    fn toggle(&mut self, id: &str, expected: bool, enabled: bool) -> Result<(), String> {
+    fn toggle(
+        &mut self,
+        id: &str,
+        expected: bool,
+        enabled: bool,
+        token: Option<&str>,
+    ) -> Result<(), String> {
         self.reload()?;
         let record = self.records.get(id).ok_or("凭证已不存在")?;
         if !record.row.editable {
             return Err("该凭证不能独立切换".into());
         }
-        if record.row.enabled != expected {
+        if record.row.enabled != expected || token.is_some_and(|t| t != record.row.delete_token) {
             return Err("账号状态已被其他界面修改，已刷新，请重新确认".into());
         }
         let body = json!({"name":record.name,"auth_index":record.auth_index,"disabled":!enabled});
@@ -359,7 +382,7 @@ pub async fn credential_toggle(
     expected: bool,
     enabled: bool,
 ) -> Result<Snapshot, String> {
-    operate(app, move |s, _| s.toggle(&id, expected, enabled)).await
+    operate(app, move |s, _| s.toggle(&id, expected, enabled, None)).await
 }
 #[tauri::command]
 pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<Snapshot, String> {

@@ -1,6 +1,6 @@
 import { ArrowUpRight, RefreshCw, Trash2 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { credentialQuotas, resetLabel, type Credential } from "./data";
+import { credentialQuotas, planLabel, resetLabel, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 function Quota({
   label,
@@ -40,8 +40,8 @@ function Quota({
     </div>
   );
 }
-export function CredentialCard({ c, state: s, preview, onDelete }: {
-  c: Credential; state: CredentialsState; preview: (id: string) => void; onDelete: (c: Credential) => void;
+export function CredentialCard({ c, state: s, preview, onDelete, selected, onSelect }: {
+  c: Credential; state: CredentialsState; preview: (id: string) => void; onDelete: (c: Credential) => void; selected: boolean; onSelect: () => void;
 }) {
   return (
               <article
@@ -49,6 +49,7 @@ export function CredentialCard({ c, state: s, preview, onDelete }: {
 
               >
                 <header>
+                  <input className="credential-check" type="checkbox" aria-label={`选择 ${c.name}`} checked={selected} disabled={s.busy || s.stale || !c.deletable} onChange={onSelect} />
                   <Brand name={c.brand} />
                   <span title={c.name}>{c.name}</span>
                   <Toggle
@@ -58,6 +59,12 @@ export function CredentialCard({ c, state: s, preview, onDelete }: {
                     onChange={() => void s.toggle(c.id)}
                   />
                 </header>
+                {c.provider === "codex" && <div className="credential-tags">
+                  <span className="plan-badge" data-plan={c.plan || "unknown"}>{planLabel(c.plan)}</span>
+                  <span className="reset-count" title={c.resetCountError || undefined}>
+                    {c.resetCountError ? (c.resetAvailable == null ? "重置次数未获取" : `上次剩余 ${c.resetAvailable} 次 · 更新失败`) : c.resetAvailable == null ? "重置次数未查询" : `重置剩余 ${c.resetAvailable} 次`}
+                  </span>
+                </div>}
                 {credentialQuotas(c).map((q, index) => (
                   <Quota key={`${q.label}:${index}`} label={q.label} value={q.remaining} reset={q.reset} detail={q.detail} period={q.period} />
                 ))}

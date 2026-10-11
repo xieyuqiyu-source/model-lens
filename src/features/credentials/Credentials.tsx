@@ -12,6 +12,8 @@ import { Brand, Toggle } from "../../components/Common";
 import { activeCredentialsFirst, compactQuota, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 import { CredentialCard } from "./CredentialCard";
+import { CredentialTools } from "./CredentialTools";
+import { BatchDeleteDialog } from "./BatchDeleteDialog";
 import { DeleteDialog } from "./DeleteDialog";
 type Props = {
   state: CredentialsState;
@@ -92,6 +94,8 @@ export function CredentialRows({
 }
 export function Credentials(p: Props) {
   const s = p.state;
+  const [selected, setSelected] = useState<string[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState<Credential[] | null>(null);
   const [deleting, setDeleting] = useState<Credential | null>(null);
   return (
     <section
@@ -150,6 +154,7 @@ export function Credentials(p: Props) {
           )}
         </div>
       </header>
+      {p.expanded && <CredentialTools state={s} selected={selected} onSelect={setSelected} onDelete={setBatchDeleting} />}
       {s.error && (
         <p className="notice credentials-notice" role="alert">
           {s.error}
@@ -160,7 +165,7 @@ export function Credentials(p: Props) {
         <>
           <div className="credential-grid">
             {s.credentials.map((c) => (
-              <CredentialCard key={c.id} c={c} state={s} preview={p.preview} onDelete={setDeleting} />
+              <CredentialCard key={c.id} c={c} state={s} preview={p.preview} onDelete={setDeleting} selected={selected.includes(c.id)} onSelect={() => setSelected(ids => ids.includes(c.id) ? ids.filter(id => id !== c.id) : [...ids, c.id])} />
             ))}
           </div>
           <div className="section-foot">
@@ -191,6 +196,7 @@ export function Credentials(p: Props) {
           </span>
         </>
       )}
+      {batchDeleting && <BatchDeleteDialog credentials={batchDeleting} state={s} onClose={() => { setBatchDeleting(null); setSelected([]); }} />}
       {deleting && <DeleteDialog credential={deleting} state={s} onClose={() => setDeleting(null)} />}
     </section>
   );

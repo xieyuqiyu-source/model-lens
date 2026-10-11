@@ -34,7 +34,7 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'discover_services') return {services:[],checkedAt:0,statusKnown:true,warning:null};
     if (cmd === 'set_appearance') return;
     if (cmd === 'probe_models') return [];
-    if (!['management_snapshot','credential_import','credential_delete','quota_refresh','credentials_list'].includes(cmd))
+    if (!['management_snapshot','credential_import','credential_delete','quota_refresh','credentials_list','credentials_toggle','credentials_delete','copy_client_key'].includes(cmd))
       throw new Error(`Unexpected mock command: ${cmd}`);
     const s = window.__testSnapshot;
     if (cmd !== 'management_snapshot') {
@@ -44,14 +44,22 @@ window.__TAURI_INTERNALS__ = {
       if (window.__testNextError) {
         s.error = window.__testNextError; window.__testNextError = null;
         s.stale = Boolean(window.__testStale);
+      } else if (cmd === 'copy_client_key') {
+        window.__testKeyCopies = (window.__testKeyCopies || 0) + 1;
+      } else if (cmd === 'credentials_toggle' || cmd === 'credentials_delete') {
+        const targets = args.targets;
+        if (targets.some(t => !s.credentials.some(r => r.id === t.id && r.deleteToken === t.deleteToken && r.enabled === t.enabled))) s.error = '凭证已变化，请重新选择';
+        else if (cmd === 'credentials_delete') s.credentials = s.credentials.filter(r => !targets.some(t => t.id === r.id));
+        else for (const r of s.credentials.filter(r => targets.some(t => t.id === r.id))) { r.enabled = args.enabled; r.deleteToken += '-changed'; }
       } else if (cmd === 'quota_refresh') {
         for (const r of s.credentials.filter(r => args.id === null || r.id === args.id)) {r.five = 73; r.quotaAt = 100;}
       } else if (cmd === 'credential_import') {
         let parsed;
         try { parsed = JSON.parse(args.contents); } catch { s.error = 'JSON 格式无效，请检查原文件；内容未上传'; }
         if (parsed) {
-          if (s.credentials.some(r => r.fileName.toLowerCase() === args.name.toLowerCase())) s.error = '已存在同名凭证，未覆盖；请更换文件名后重新导入';
-          else s.credentials.push({...row(args.name.replace(/\.json$/i, '')), fileName:args.name});
+          const name = args.name || 'codex-pasted@example.invalid.json';
+          if (s.credentials.some(r => r.fileName.toLowerCase() === name.toLowerCase())) s.error = '已存在同名凭证，未覆盖；请核对已导入账号，或重命名文件后选择导入';
+          else s.credentials.push({...row(name.replace(/\.json$/i, '')), name: parsed.email || name.replace(/\.json$/i, '')+'@example.invalid', fileName:name});
         }
       } else if (cmd === 'credential_delete') {
         s.credentials = s.credentials.filter(r => r.id !== args.id);

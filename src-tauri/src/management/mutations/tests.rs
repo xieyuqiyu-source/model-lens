@@ -37,6 +37,75 @@ fn import_validates_before_network_and_redacts_content() {
     assert!(parse_import("a.json", &"x".repeat(MAX_IMPORT_BYTES + 1)).is_err());
     assert!(parse_import("valid.JSON", "\u{feff}{\"type\":\"codex\"}").is_ok());
 }
+
+#[test]
+fn pasted_import_names_are_safe_and_do_not_use_tokens() {
+    let (name, body) = parse_import(
+        "",
+        r#"{"type":"codex","email":" a+b@example.invalid ","access_token":"synthetic-secret"}"#,
+    )
+    .unwrap();
+    assert_eq!(name, "codex-a+b@example.invalid.json");
+    assert_eq!(body["email"], " a+b@example.invalid ");
+    for email in [
+        json!("../outside/path:\n秘密@example.invalid"),
+        json!("é".repeat(400)),
+        Value::Null,
+        json!(42),
+        json!(" "),
+    ] {
+        let contents = json!({"type":"gemini-cli","email":email,"access_token":"synthetic-secret"})
+            .to_string();
+        let (name, _) = parse_import("", &contents).unwrap();
+        assert!(valid_name(&name));
+        assert!(!name.contains("synthetic-secret"));
+        if !email.is_string() || email.as_str().unwrap().trim().is_empty() {
+            assert!(name.starts_with("gemini-cli-import-"));
+        }
+    }
+    assert!(parse_import("", "broken").is_err());
+    assert!(parse_import("", "{}").is_err());
+    assert_eq!(
+        parse_import(
+            "original.json",
+            r#"{"type":"codex","email":"a@example.invalid"}"#
+        )
+        .unwrap()
+        .0,
+        "original.json"
+    );
+}
+
+#[test]
+fn pasted_import_uses_generated_name_for_write_verification_and_conflicts() {
+    let name = "codex-a+b@example.invalid.json";
+    let contents = r#"{"type":"codex","email":"a+b@example.invalid"}"#;
+    for legacy in [false, true] {
+        let (port, task) = server(vec![
+            (200, empty()),
+            (200, json!({"status":"ok"})),
+            (200, imported(name)),
+            (200, imported(&name.to_uppercase())),
+        ]);
+        let mut s = session(port);
+        s.api.as_mut().unwrap().legacy = legacy;
+        s.import_credential("", contents).unwrap();
+        assert!(s
+            .import_credential("", contents)
+            .unwrap_err()
+            .contains("同名"));
+        let requests = task.join().unwrap();
+        let base = if legacy {
+            "/v0/management/auth-files"
+        } else {
+            "/v8/management/credentials"
+        };
+        assert!(requests[1].starts_with(&format!(
+            "POST {base}?name=codex-a%2Bb%40example.invalid.json "
+        )));
+        assert_eq!(requests.iter().filter(|r| r.starts_with("POST")).count(), 1);
+    }
+}
 #[test]
 fn import_and_delete_use_encoded_names_on_v8_and_v0() {
     let name = "account &all=true.json";
@@ -187,10 +256,13 @@ fn acknowledged_write_must_be_verified_and_failed_reload_marks_stale() {
 }
 #[test]
 fn stopped_credentials_can_query_quota_without_toggling() {
-    let (port, task) = server(vec![(
-        200,
-        json!({"status_code":200,"body":{"rate_limit":{"primary_window":{"used_percent":30}}}}),
-    )]);
+    let (port, task) = server(vec![
+        (
+            200,
+            json!({"status_code":200,"body":{"rate_limit":{"primary_window":{"used_percent":30}}}}),
+        ),
+        (200, json!({"status_code":200,"body":{"available_count":0}})),
+    ]);
     let mut s = session(port);
     s.records = normalize(&files(true)).unwrap();
     assert_eq!(s.quota_targets(None), vec!["mock.json:idx"]);
@@ -198,7 +270,7 @@ fn stopped_credentials_can_query_quota_without_toggling() {
     assert!(!s.records["mock.json:idx"].row.enabled);
     assert_eq!(s.records["mock.json:idx"].row.five, Some(70.0));
     let requests = task.join().unwrap();
-    assert_eq!(requests.len(), 1);
+    assert_eq!(requests.len(), 2);
     assert!(requests[0].starts_with("POST /v8/management/requests/api-call "));
 }
 

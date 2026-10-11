@@ -141,7 +141,7 @@ pub(super) fn parse(provider: &str, body: &Value) -> Result<Vec<QuotaItem>, Stri
     Ok(items)
 }
 
-fn request(
+pub(super) fn request(
     api: &Api,
     record: &Record,
     method: &str,

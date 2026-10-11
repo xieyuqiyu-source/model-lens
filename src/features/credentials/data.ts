@@ -15,6 +15,10 @@ export type Credential = {
   resetFive: string;
   resetWeek: string;
   quotaItems?: QuotaItem[];
+  plan?: string | null;
+  resetAvailable?: number | null;
+  resetCountAt?: number | null;
+  resetCountError?: string | null;
   quotaAt: number | null;
   quotaError: string | null;
 };
@@ -72,4 +76,11 @@ export function compactQuota(c: Credential) {
     description,
     weekly: chosen?.period === "1w",
   };
+}
+
+export type CredentialTarget = Pick<Credential, "id" | "deleteToken" | "enabled">;
+export const credentialTargets = (rows: Credential[]): CredentialTarget[] =>
+  rows.map(({ id, deleteToken, enabled }) => ({ id, deleteToken, enabled }));
+export function planLabel(plan?: string | null): string {
+  return ({free:"Free",plus:"Plus",pro:"Pro",team:"Team",business:"Business",enterprise:"Enterprise",edu:"Edu",go:"Go"} as Record<string,string>)[plan || ""] || "等级未知";
 }

@@ -28,3 +28,11 @@ test('新厂商紧凑额度保留真实周期、模型最低值和未知百分�
   assert.equal(compactQuota({provider:'gemini',quotaItems:[{...item('请求',null,'模型'),detail:'剩余 12 请求'}]}).value,null);
   assert.equal(credentialQuotas({provider:'xai'})[0].label,'额度');
 });
+
+test('账号等级只展示白名单文案，批量请求只包含核实字段', async () => {
+  const { planLabel, credentialTargets } = await import('../src/features/credentials/data.ts');
+  assert.equal(planLabel('free'), 'Free');
+  assert.equal(planLabel('pro'), 'Pro');
+  assert.equal(planLabel('private-token'), '等级未知');
+  assert.deepEqual(credentialTargets([{id:'a',enabled:true,deleteToken:'version',name:'private',quotaItems:[]}]), [{id:'a',enabled:true,deleteToken:'version'}]);
+});

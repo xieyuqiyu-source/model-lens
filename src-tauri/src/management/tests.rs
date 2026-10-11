@@ -91,7 +91,7 @@ fn write_failure_reconciles_without_retry() {
         api: Some(Api::new(port, "mock-key".into()).unwrap()),
         ..Session::default()
     };
-    assert!(session.toggle("mock.json:idx", true, false).is_err());
+    assert!(session.toggle("mock.json:idx", true, false, None).is_err());
     assert!(!session.records["mock.json:idx"].row.enabled);
     assert!(!session.snapshot.stale);
     let requests = task.join().unwrap();
@@ -109,17 +109,20 @@ fn external_change_prevents_write() {
         ..Session::default()
     };
     assert!(session
-        .toggle("mock.json:idx", true, false)
+        .toggle("mock.json:idx", true, false, None)
         .unwrap_err()
         .contains("其他界面"));
     assert_eq!(task.join().unwrap().len(), 1);
 }
 #[test]
 fn quota_uses_fixed_url_and_token_placeholder() {
-    let (port, task) = server(vec![(
-        200,
-        json!({"status_code":200,"body":"{\"rate_limit\":{\"primary_window\":{\"used_percent\":20}}}"}),
-    )]);
+    let (port, task) = server(vec![
+        (
+            200,
+            json!({"status_code":200,"body":"{\"rate_limit\":{\"primary_window\":{\"used_percent\":20}}}"}),
+        ),
+        (200, json!({"status_code":200,"body":{"available_count":0}})),
+    ]);
     let api = Api::new(port, "mock-key".into()).unwrap();
     let map = normalize(&files(false)).unwrap();
     let row = quota::fetch(&api, &map["mock.json:idx"]).unwrap();

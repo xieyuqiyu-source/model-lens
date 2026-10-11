@@ -23,7 +23,7 @@ pub struct Answer {
     reported_model: String,
     elapsed_ms: u64,
 }
-fn client_key(session: &Session) -> Result<String, String> {
+pub(super) fn client_key(session: &Session) -> Result<String, String> {
     let api = session.api.as_ref().ok_or("请先连接管理接口")?;
     // User-authorized access to this one configuration field; never fetch the full config.
     let value = api.call(

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { native } from "../service/api";
 import { managementApi } from "./api";
-import type { Credential, ManagementSnapshot } from "./data";
+import { credentialTargets, type Credential, type ManagementSnapshot } from "./data";
 const empty: ManagementSnapshot = {
   connected: false,
   saved: false,
@@ -89,6 +89,11 @@ export function useCredentials() {
       run(() => managementApi.importCredential(name, contents)),
     deleteCredential: (row: Credential) =>
       run(() => managementApi.deleteCredential(row.id, row.deleteToken)),
+    copyClientKey: () => run(managementApi.copyClientKey),
+    toggleMany: (rows: Credential[], enabled: boolean) =>
+      run(() => managementApi.toggleMany(credentialTargets(rows), enabled)),
+    deleteMany: (rows: Credential[]) =>
+      run(() => managementApi.deleteMany(credentialTargets(rows))),
     toggle: (id: string) => {
       const row = snapshot.credentials.find((c) => c.id === id);
       if (row)

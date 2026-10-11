@@ -1,3 +1,4 @@
+pub(super) mod codex;
 #[cfg(test)]
 mod provider_tests;
 mod providers;
@@ -43,34 +44,17 @@ pub fn parse(provider: &str, body: &Value, row: &mut Credential) -> Result<(), S
         return Ok(());
     }
     if provider == "codex" {
-        let rate = body.get("rate_limit").ok_or("上游未提供额度窗口")?;
-        for (key, fallback) in [("primary_window", 18000), ("secondary_window", 604800)] {
-            let window = &rate[key];
-            if !window.is_object() {
-                continue;
-            }
-            let seconds = window["limit_window_seconds"].as_u64().unwrap_or(fallback);
-            let used = remaining(&window["used_percent"]);
-            let at = reset(&window["reset_at"]);
-            match seconds {
-                18000 => {
-                    row.five = used;
-                    row.reset_five = at;
-                }
-                604800 => {
-                    row.week = used;
-                    row.reset_week = at;
-                }
-                _ => {}
-            }
-        }
+        codex::parse_usage(body, row)?;
     } else if provider == "claude" {
         row.five = remaining(&body["five_hour"]["utilization"]);
         row.week = remaining(&body["seven_day"]["utilization"]);
         row.reset_five = reset(&body["five_hour"]["resets_at"]);
         row.reset_week = reset(&body["seven_day"]["resets_at"]);
     }
-    if row.five.is_none() && row.week.is_none() {
+    if row.five.is_none()
+        && row.week.is_none()
+        && row.quota_items.iter().all(|q| q.remaining.is_none())
+    {
         return Err("上游未提供可识别的 5h／1w 额度".into());
     }
     Ok(())
@@ -82,6 +66,9 @@ pub fn fetch(api: &Api, record: &Record) -> Result<Credential, String> {
     let body = providers::fetch(api, record)?;
     let mut row = record.row.clone();
     parse(&record.provider, &body, &mut row)?;
+    if record.provider == "codex" {
+        codex::refresh_resets(api, record, &body, &mut row);
+    }
     row.quota_at = Some(super::now());
     row.quota_error = None;
     Ok(row)

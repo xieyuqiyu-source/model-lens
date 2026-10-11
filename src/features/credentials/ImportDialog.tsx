@@ -4,7 +4,6 @@ import type { CredentialsState } from "./useCredentials";
 
 const maxBytes = 1024 * 1024;
 export function ImportDialog({ state, onClose }: { state: CredentialsState; onClose: () => void }) {
-  const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
@@ -27,7 +26,7 @@ export function ImportDialog({ state, onClose }: { state: CredentialsState; onCl
               setError("JSON 不能为空，且不能超过 1 MiB");
               return;
             }
-            if (await state.importCredential(name, contents)) {
+            if (await state.importCredential(file?.name ?? "", contents)) {
               if (paste.current) paste.current.value = "";
               setFile(null);
               dismiss();
@@ -39,23 +38,18 @@ export function ImportDialog({ state, onClose }: { state: CredentialsState; onCl
             setReading(false);
           }
         }}>
-          <p className="muted">选择单个凭证文件，或粘贴 CLIProxy 凭证 JSON。导入后由 CLIProxy 保存，发现同名文件会停止导入。</p>
-          <label>文件名
-            <input aria-label="凭证文件名" required value={name} disabled={blocked} placeholder="account.json" autoComplete="off" spellCheck={false} onChange={(e) => setName(e.target.value)} />
-          </label>
+          <p className="muted">选择文件或粘贴凭证 JSON，粘贴内容自动命名，不覆盖同名文件。</p>
           <input ref={fileInput} type="file" accept=".json,application/json" aria-label="选择 JSON 文件" hidden disabled={blocked} onChange={(e) => {
             const selected = e.target.files?.[0];
             e.target.value = "";
             if (!selected) return;
             if (selected.size > maxBytes || !selected.size) {
               setFile(null);
-              setName("");
               setError("文件不能为空，且不能超过 1 MiB");
               return;
             }
             setError("");
             setFile(selected);
-            setName(selected.name);
             if (paste.current) paste.current.value = "";
           }} />
           {file ? <div className="saved-connection import-file">
