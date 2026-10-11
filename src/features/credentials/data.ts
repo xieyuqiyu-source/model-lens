@@ -1,3 +1,4 @@
+export type QuotaItem = { label: string; remaining: number | null; detail: string; reset: string; period: string };
 export type Credential = {
   id: string;
   name: string;
@@ -13,6 +14,7 @@ export type Credential = {
   week: number | null;
   resetFive: string;
   resetWeek: string;
+  quotaItems?: QuotaItem[];
   quotaAt: number | null;
   quotaError: string | null;
 };
@@ -46,4 +48,28 @@ export function traySummary(state: Pick<ManagementSnapshot, "connected" | "busy"
 
 export function activeCredentialsFirst(rows: Credential[]): Credential[] {
   return [...rows.filter((row) => row.enabled), ...rows.filter((row) => !row.enabled)];
+}
+
+export function credentialQuotas(c: Credential): QuotaItem[] {
+  if (c.quotaItems?.length) return c.quotaItems;
+  if (["codex", "claude"].includes(c.provider)) return [
+    { label: "5h", remaining: c.five, detail: "", reset: c.resetFive, period: "5h" },
+    { label: "1w", remaining: c.week, detail: "", reset: c.resetWeek, period: "1w" },
+  ];
+  return [{ label: "额度", remaining: null, detail: "", reset: "", period: "" }];
+}
+export function compactQuota(c: Credential) {
+  const items = credentialQuotas(c);
+  const known = items.filter(q => q.remaining !== null);
+  const five = known.filter(q => q.period === "5h");
+  const week = known.filter(q => q.period === "1w");
+  const candidates = five.length ? five : week.length ? week : known;
+  const chosen = candidates.reduce<QuotaItem | undefined>((min, q) => !min || q.remaining! < min.remaining! ? q : min, undefined);
+  const description = items.map(q => `${q.label}：${q.remaining === null ? "百分比未提供" : `剩余 ${q.remaining}%`}${q.detail ? ` · ${q.detail}` : ""}`).join("；");
+  return {
+    value: chosen?.remaining ?? null,
+    period: chosen ? (candidates.length > 1 ? "最低" : chosen.period) : "",
+    description,
+    weekly: chosen?.period === "1w",
+  };
 }

@@ -9,7 +9,7 @@ import {
   ListRestart,
 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { activeCredentialsFirst, type Credential } from "./data";
+import { activeCredentialsFirst, compactQuota, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 import { CredentialCard } from "./CredentialCard";
 import { DeleteDialog } from "./DeleteDialog";
@@ -46,22 +46,24 @@ export function CredentialRows({
           </button>
         </div>
       )}
-      {activeCredentialsFirst(state.credentials).map((c) => (
+      {activeCredentialsFirst(state.credentials).map((c) => {
+        const quota = compactQuota(c);
+        return (
         <div className={`credential-row ${!c.enabled ? "off" : ""}`} key={c.id}>
           <Brand name={c.brand} />
           <div
-            className={`account-bar ${c.five === null ? "weekly" : ""}`}
-            data-quota={c.five === null && c.week === null ? "missing" : "known"}
+            className={`account-bar ${quota.weekly ? "weekly" : ""}`}
+            data-quota={quota.value === null ? "missing" : "known"}
             data-error={Boolean(c.quotaError)}
-            style={{ "--quota-width": `${c.five ?? c.week ?? 0}%` } as CSSProperties}
-            title={`${c.name} · ${c.provider} · ${c.quotaError || (c.five !== null ? `5h 剩余 ${c.five}%` : c.week !== null ? `1w 剩余 ${c.week}%` : !c.enabled ? "已停用，仍可查询额度" : !c.supported ? "此厂商额度暂未适配" : "额度尚未查询")}`}
+            style={{ "--quota-width": `${quota.value ?? 0}%` } as CSSProperties}
+            title={`${c.name} · ${c.provider} · ${quota.description}${c.quotaError ? ` · ${c.quotaError}（仍显示上次数据）` : ""}`}
           >
             <span className="account-fill" />
             <span className="account-label">{c.name}</span>
             <span className="account-label account-label-on-fill" aria-hidden="true">{c.name}</span>
           </div>
           <span className="period">
-            {c.five !== null ? "5h" : c.week !== null ? "1w" : ""}
+            {quota.period}
           </span>
           <span className="row-status" title={c.quotaError || undefined}>
             {c.quotaError && <CircleAlert size={12} aria-label={c.quotaError} />}
@@ -69,7 +71,7 @@ export function CredentialRows({
           <button
             className="icon-button small"
             title={
-              c.quotaError || (!c.supported ? "此厂商额度暂未适配" : "刷新额度")
+              c.quotaError || (!c.supported ? "此凭证类型暂不支持额度查询" : "刷新额度")
             }
             aria-label={`刷新 ${c.name} 额度`}
             disabled={state.busy || !c.supported || state.stale}
@@ -84,7 +86,7 @@ export function CredentialRows({
             onChange={() => void state.toggle(c.id)}
           />
         </div>
-      ))}
+      ); })}
     </div>
   );
 }
