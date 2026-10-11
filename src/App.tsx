@@ -41,6 +41,14 @@ function usePreference(key: string, fallback: string) {
   ] as const;
 }
 export default function App() {
+  const [keyboardFocus, setKeyboardFocus] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab" || (!event.metaKey && !event.ctrlKey && !event.altKey)) setKeyboardFocus(true);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
   const services = useServices();
   const appearance = useAppearance();
   const [focus, setFocus] = usePreference("focus", "probe");
@@ -91,7 +99,11 @@ export default function App() {
   };
   const rows = <CredentialRows state={credentials} onConnect={connect} />;
   return (
-    <div className={isTray ? "tray-app" : "app"}>
+    <div
+      className={isTray ? "tray-app" : "app"}
+      data-keyboard-focus={keyboardFocus}
+      onPointerDownCapture={() => setKeyboardFocus(false)}
+    >
       {isTray ? (
         <>
           <header className="tray-header">

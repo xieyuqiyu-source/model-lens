@@ -1057,3 +1057,5 @@ html[data-appearance="dark"] img.brand { filter: invert(1); }
 .account-bar[data-quota="missing"] { background: var(--surface); color: var(--text); }
 .off .account-bar { color: var(--muted); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* WebKit 自动聚焦弹窗及恢复焦点时，鼠标操作也可能匹配 :focus-visible。 */
+[data-keyboard-focus="false"] :focus-visible:not(input):not(textarea) { outline: none; }

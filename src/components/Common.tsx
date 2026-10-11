@@ -61,7 +61,11 @@ export function Modal({
   const dismiss = () => {
     if (!animation.current) {
       setClosing(true);
-      animation.current = dismissSurface(ref.current, onClose);
+      animation.current = dismissSurface(ref.current, () => {
+        // 在卸载前关闭，让原生 dialog 将键盘焦点还给入口。
+        ref.current?.close();
+        onClose();
+      });
     }
   };
   useEffect(() => {
