@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  History,
-  Settings,
-  RefreshCw,
-  ArrowUpRight,
-  Scan,
-  X,
-} from "lucide-react";
+import { History, Settings, RefreshCw, ArrowUpRight, Scan } from "lucide-react";
+import { Segment } from "./components/Segment";
+import { Toast } from "./components/Toast";
 import { Logo, Modal } from "./components/Common";
 import { useServices } from "./features/service/useServices";
 import { ServicePanel } from "./features/service/ServicePanel";
@@ -53,18 +48,17 @@ export default function App() {
   useEffect(() => {
     if (!isTray) return;
     const dismiss = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !modal) void closeTray();
+      if (
+        event.key === "Escape" &&
+        !modal &&
+        !document.querySelector('[popover][data-open="true"]')
+      )
+        void closeTray();
     };
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
   }, [isTray, modal]);
   const preview = () => setToast("模型检测尚未接入，本次没有发起模型请求。");
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(""), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
   const status = (
     <button
       className="service-status"
@@ -125,20 +119,16 @@ export default function App() {
         <>
           <header className="titlebar" data-tauri-drag-region>
             <Logo />
-            <div className="segment focus-switch">
-              <button
-                aria-pressed={focus === "probe"}
-                onClick={() => setFocus("probe")}
-              >
-                探查优先
-              </button>
-              <button
-                aria-pressed={focus === "credentials"}
-                onClick={() => setFocus("credentials")}
-              >
-                凭证优先
-              </button>
-            </div>
+            <Segment
+              label="窗口重点"
+              className="focus-switch"
+              value={focus}
+              onChange={setFocus}
+              options={[
+                ["probe", "探查优先"],
+                ["credentials", "凭证优先"],
+              ]}
+            />
             <div className="titlebar-right">
               {status}
               <button
@@ -236,16 +226,7 @@ export default function App() {
         </Modal>
       )}
       {toast && (
-        <div className="toast" role="status">
-          <span>{toast}</span>
-          <button
-            className="icon-button"
-            aria-label="关闭提示"
-            onClick={() => setToast("")}
-          >
-            <X size={13} />
-          </button>
-        </div>
+        <Toast key={toast} message={toast} onClose={() => setToast("")} />
       )}
     </div>
   );

@@ -10,7 +10,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
         value={'{\n  "type": "example",\n  "account": "your-account"\n}'}
       />
       <p className="notice">
-        此版本展示导入界面，尚未连接凭证管理。请勿在这里输入真实凭证。
+        凭证列表和开关已接入，JSON 导入尚未开放。请勿在这里输入真实凭证。
       </p>
       <div className="modal-actions">
         <button className="button" disabled>

@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Check, Copy, ChevronDown } from "lucide-react";
+import { Check, Copy } from "lucide-react";
+import { Select } from "../../components/Select";
+import { Segment } from "../../components/Segment";
+import { Disclosure } from "../../components/Disclosure";
 import { Brand } from "../../components/Common";
 type Props = {
   compact: boolean;
@@ -18,20 +21,38 @@ export function ModelSelect({
   onChange: (v: string) => void;
 }) {
   return (
-    <select
-      aria-label="选择模型（预览）"
+    <Select
+      label="选择模型（预览）"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option>Sonnet 4.5</option>
-      <option>GPT-5</option>
-      <option>Gemini 2.5 Pro</option>
-      <option>DeepSeek V3</option>
-    </select>
+      onChange={onChange}
+      options={[
+        {
+          value: "Sonnet 4.5",
+          label: "Sonnet 4.5",
+          brand: "claude",
+          detail: "Anthropic",
+        },
+        { value: "GPT-5", label: "GPT-5", brand: "openai", detail: "OpenAI" },
+        {
+          value: "Gemini 2.5 Pro",
+          label: "Gemini 2.5 Pro",
+          brand: "gemini",
+          detail: "Google",
+        },
+        {
+          value: "DeepSeek V3",
+          label: "DeepSeek V3",
+          brand: "deepseek",
+          detail: "DeepSeek",
+        },
+      ]}
+    />
   );
 }
+
 export function Probe(p: Props) {
   const [answer, setAnswer] = useState("");
+  const [example, setExample] = useState("work");
   return (
     <section
       className={`probe ${p.compact ? "compact" : ""}`}
@@ -47,20 +68,15 @@ export function Probe(p: Props) {
           </p>
         </div>
         {!p.compact && (
-          <div className="segment">
-            <button
-              aria-pressed={p.mode === "auto"}
-              onClick={() => p.setMode("auto")}
-            >
-              自动检测
-            </button>
-            <button
-              aria-pressed={p.mode === "manual"}
-              onClick={() => p.setMode("manual")}
-            >
-              手动检测
-            </button>
-          </div>
+          <Segment
+            label="检测模式"
+            value={p.mode}
+            onChange={p.setMode}
+            options={[
+              ["auto", "自动检测"],
+              ["manual", "手动检测"],
+            ]}
+          />
         )}
       </header>
       <div className="probe-form">
@@ -70,11 +86,31 @@ export function Probe(p: Props) {
         </label>
         <label className="credential-choice">
           <span>凭证</span>
-          <select aria-label="选择示例凭证">
-            <option>work</option>
-            <option>personal</option>
-            <option>backup</option>
-          </select>
+          <Select
+            label="选择示例凭证"
+            value={example}
+            onChange={setExample}
+            options={[
+              {
+                value: "work",
+                label: "work",
+                brand: "claude",
+                detail: "探查界面示例",
+              },
+              {
+                value: "personal",
+                label: "personal",
+                brand: "openai",
+                detail: "探查界面示例",
+              },
+              {
+                value: "backup",
+                label: "backup",
+                brand: "gemini",
+                detail: "探查界面示例",
+              },
+            ]}
+          />
         </label>
         {p.compact && (
           <div className="compact-account">
@@ -169,33 +205,19 @@ export function Probe(p: Props) {
               </footer>
             </article>
           )}
-          <details>
-            <summary>
-              检测提示词
-              <span>
-                3 条 · 待接入
-                <ChevronDown size={12} />
-              </span>
-            </summary>
+          <Disclosure title="检测提示词" hint="3 条 · 待接入">
             <p className="muted">
               接入检测内核后，这里将展示三条可展开、复制的检测提示词。
             </p>
-          </details>
-          <details>
-            <summary>
-              原始回答与采样详情
-              <span>
-                查看
-                <ChevronDown size={12} />
-              </span>
-            </summary>
+          </Disclosure>
+          <Disclosure title="原始回答与采样详情" hint="查看">
             <p className="muted">当前为界面预览，尚未发起真实采样。</p>
-          </details>
+          </Disclosure>
         </>
       )}
       <footer className="probe-foot">
         上次使用：{p.mode === "auto" ? "自动检测" : "手动检测"}
-        <span>本机预览版 0.2.0</span>
+        <span>本机预览版 0.2.1</span>
       </footer>
     </section>
   );

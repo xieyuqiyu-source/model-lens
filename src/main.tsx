@@ -4,6 +4,7 @@ import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import App from "./App";
 import "./styles/app.css";
+import "./styles/motion.css";
 // Transparent web content lets the native macOS menu material show through.
 if (new URLSearchParams(location.search).get("view") === "tray") {
   document.documentElement.dataset.surface = "tray";
