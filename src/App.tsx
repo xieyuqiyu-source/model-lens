@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
+import { createWorkspaceMotion } from "./components/workspaceMotion";
 import { History, Settings, RefreshCw, ArrowUpRight, Scan } from "lucide-react";
 import { Segment } from "./components/Segment";
 import { Toast } from "./components/Toast";
@@ -38,6 +40,10 @@ function usePreference(key: string, fallback: string) {
 export default function App() {
   const services = useServices();
   const [focus, setFocus] = usePreference("focus", "probe");
+  const [workspaceMotion] = useState(createWorkspaceMotion);
+  useEffect(() => () => workspaceMotion.cancel(), [workspaceMotion]);
+  const changeFocus = (value: string) =>
+    workspaceMotion.run(() => flushSync(() => setFocus(value)));
   const [mode, setMode] = usePreference("mode", "auto");
   const [model, setModel] = usePreference("model", "Sonnet 4.5");
   const credentials = useCredentials();
@@ -123,7 +129,7 @@ export default function App() {
               label="窗口重点"
               className="focus-switch"
               value={focus}
-              onChange={setFocus}
+              onChange={changeFocus}
               options={[
                 ["probe", "探查优先"],
                 ["credentials", "凭证优先"],
@@ -160,7 +166,7 @@ export default function App() {
           >
             <Probe
               compact={focus === "credentials"}
-              onExpand={() => setFocus("probe")}
+              onExpand={() => changeFocus("probe")}
               preview={preview}
               mode={mode}
               setMode={setMode}
@@ -173,7 +179,7 @@ export default function App() {
               onConnect={connect}
               preview={preview}
               onImport={() => setModal("import")}
-              onExpand={() => setFocus("credentials")}
+              onExpand={() => changeFocus("credentials")}
               onTray={() => {
                 if (native)
                   void openTray().catch(() =>

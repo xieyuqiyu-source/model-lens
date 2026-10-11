@@ -223,7 +223,6 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 62.5fr) minmax(0, 37.5fr);
   height: calc(100% - 56px);
-  transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .workspace.credential-focus {
   grid-template-columns: minmax(0, 27fr) minmax(0, 73fr);
