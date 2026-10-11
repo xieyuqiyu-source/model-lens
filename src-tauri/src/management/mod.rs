@@ -32,6 +32,7 @@ pub struct Credential {
     pub week: Option<f64>,
     pub reset_five: String,
     pub reset_week: String,
+    pub quota_items: Vec<quota::QuotaItem>,
     pub quota_at: Option<u64>,
     pub quota_error: Option<String>,
 }
@@ -54,6 +55,7 @@ struct Record {
     auth_index: String,
     provider: String,
     account_id: String,
+    project_id: String,
 }
 #[derive(Default)]
 struct Session {
@@ -100,13 +102,25 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
         let brand = match provider.as_str() {
             "codex" | "openai" | "openai-compatibility" => "openai",
             "claude" => "claude",
-            "gemini" | "antigravity" => "gemini",
+            "gemini" | "gemini-cli" | "antigravity" => "gemini",
+            "xai" | "grok" => "grok",
             "deepseek" => "deepseek",
             _ => "unknown",
         }
         .to_owned();
         let email = text(item, "email");
-        let supported = matches!(provider.as_str(), "codex" | "claude") && !auth_index.is_empty();
+        let probe_supported = matches!(provider.as_str(), "codex" | "claude")
+            && !auth_index.is_empty()
+            && text(item, "account_type") == "oauth";
+        let supported = !auth_index.is_empty()
+            && matches!(
+                provider.as_str(),
+                "codex" | "claude" | "xai" | "grok" | "gemini" | "gemini-cli" | "antigravity"
+            )
+            && !matches!(
+                text(item, "account_type").as_str(),
+                "api_key" | "api-key" | "apikey"
+            );
         // Never expose `account`, raw tokens, paths or arbitrary server fields to the webview.
         let deletable = mutations::file_backed(item, &name);
         let row = Credential {
@@ -122,7 +136,7 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
             editable: item["disabled"].is_boolean()
                 && !item["runtime_only"].as_bool().unwrap_or(false),
             supported,
-            probe_supported: supported && text(item, "account_type") == "oauth",
+            probe_supported,
             deletable,
             file_name: if deletable {
                 name.clone()
@@ -133,6 +147,11 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
             ..Credential::default()
         };
         let account_id = text(&item["id_token"], "chatgpt_account_id");
+        let project_id = [item, &item["metadata"], &item["attributes"]]
+            .iter()
+            .flat_map(|v| [text(v, "project_id"), text(v, "projectId")])
+            .find(|v| !v.is_empty())
+            .unwrap_or_default();
         if records
             .insert(
                 id,
@@ -142,6 +161,7 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
                     auth_index,
                     provider,
                     account_id,
+                    project_id,
                 },
             )
             .is_some()
@@ -180,6 +200,7 @@ impl Session {
                 record.row.week = old.row.week;
                 record.row.reset_five = old.row.reset_five.clone();
                 record.row.reset_week = old.row.reset_week.clone();
+                record.row.quota_items = old.row.quota_items.clone();
                 record.row.quota_at = old.row.quota_at;
                 record.row.quota_error = old.row.quota_error.clone();
             }

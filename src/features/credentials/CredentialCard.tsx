@@ -1,21 +1,25 @@
 import { ArrowUpRight, RefreshCw, Trash2 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { resetLabel, type Credential } from "./data";
+import { credentialQuotas, resetLabel, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 function Quota({
   label,
   value,
   reset,
+  detail = "",
+  period = "",
 }: {
   label: string;
   value: number | null;
   reset: string;
+  detail?: string;
+  period?: string;
 }) {
   return (
-    <div className={`quota ${label === "1w" ? "weekly" : ""}`}>
+    <div className={`quota ${period === "1w" ? "weekly" : ""}`}>
       <div className="quota-label">
         <span>{label}</span>
-        <span>{value === null ? "未提供" : `${value}% 剩余`}</span>
+        <span>{value === null ? detail || "未提供" : `${value}% 剩余`}</span>
       </div>
       <div
         className="track"
@@ -31,6 +35,7 @@ function Quota({
       >
         <span style={{ width: `${value ?? 0}%` }} />
       </div>
+      {value !== null && detail && <span className="quota-reset">{detail}</span>}
       <span className="quota-reset">{resetLabel(reset)}</span>
     </div>
   );
@@ -53,8 +58,9 @@ export function CredentialCard({ c, state: s, preview, onDelete }: {
                     onChange={() => void s.toggle(c.id)}
                   />
                 </header>
-                <Quota label="5h" value={c.five} reset={c.resetFive} />
-                <Quota label="1w" value={c.week} reset={c.resetWeek} />
+                {credentialQuotas(c).map((q, index) => (
+                  <Quota key={`${q.label}:${index}`} label={q.label} value={q.remaining} reset={q.reset} detail={q.detail} period={q.period} />
+                ))}
                 <div className="card-meta">
                   <div>
                     <span>厂商</span>
@@ -78,7 +84,7 @@ export function CredentialCard({ c, state: s, preview, onDelete }: {
                   {c.quotaError
                     ? `${c.quotaError}${c.quotaAt ? "（仍显示上次数据）" : ""}`
                     : !c.supported
-                      ? "此厂商额度暂未适配"
+                      ? "此凭证类型暂不支持额度查询"
                       : !c.enabled
                         ? "已停用，仍可查询额度"
                         : c.quotaAt
