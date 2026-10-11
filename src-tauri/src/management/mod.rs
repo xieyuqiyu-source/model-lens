@@ -4,6 +4,7 @@ mod local_connection;
 mod mutations;
 pub mod probe;
 mod quota;
+mod quota_cache;
 mod transport;
 use reqwest::Method;
 use serde::Serialize;
@@ -61,6 +62,7 @@ struct Record {
     provider: String,
     account_id: String,
     project_id: String,
+    revision: String,
 }
 #[derive(Default)]
 struct Session {
@@ -168,6 +170,7 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
                     provider,
                     account_id,
                     project_id,
+                    revision: [text(item, "modtime"), text(item, "updated_at")].join(""),
                 },
             )
             .is_some()
@@ -202,19 +205,11 @@ impl Session {
         };
         for (id, record) in &mut records {
             if let Some(old) = self.records.get(id) {
-                record.row.five = old.row.five;
-                record.row.week = old.row.week;
-                record.row.reset_five = old.row.reset_five.clone();
-                record.row.reset_week = old.row.reset_week.clone();
-                record.row.quota_items = old.row.quota_items.clone();
-                if record.row.plan.is_none() {
-                    record.row.plan = old.row.plan.clone();
+                if quota_cache::identity(record)
+                    .is_some_and(|key| Some(key) == quota_cache::identity(old))
+                {
+                    quota_cache::QuotaData::from(&old.row).apply(&mut record.row);
                 }
-                record.row.reset_available = old.row.reset_available;
-                record.row.reset_count_at = old.row.reset_count_at;
-                record.row.reset_count_error = old.row.reset_count_error.clone();
-                record.row.quota_at = old.row.quota_at;
-                record.row.quota_error = old.row.quota_error.clone();
             }
         }
         self.records = records;
@@ -323,6 +318,7 @@ pub async fn management_snapshot(app: tauri::AppHandle) -> Result<Snapshot, Stri
                     s.initialized = true;
                     s.snapshot.error = local_connection::LocalFile::for_app(&app)
                         .and_then(|store| s.restore(&store))
+                        .and_then(|_| quota_cache::restore(&app, &mut s))
                         .err();
                     s.snapshot.busy = false;
                     s.publish(&app);
@@ -341,7 +337,8 @@ pub async fn management_connect(
     key: String,
 ) -> Result<Snapshot, String> {
     operate(app, move |s, app| {
-        s.connect_and_save(port, key, &local_connection::LocalFile::for_app(app)?)
+        s.connect_and_save(port, key, &local_connection::LocalFile::for_app(app)?)?;
+        quota_cache::restore(app, s)
     })
     .await
 }
@@ -357,6 +354,7 @@ pub async fn management_disconnect(app: tauri::AppHandle) -> Result<Snapshot, St
 pub async fn management_restore(app: tauri::AppHandle) -> Result<Snapshot, String> {
     operate(app, |s, app| {
         s.restore(&local_connection::LocalFile::for_app(app)?)?;
+        quota_cache::restore(app, s)?;
         if !s.snapshot.saved {
             return Err("尚无本地连接记录，请输入管理密钥".into());
         }
@@ -396,6 +394,7 @@ pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<
             }
             s.publish(app);
         }
+        quota_cache::persist(app, s)?;
         if failed > 0 {
             Err(format!("{failed} 个凭证额度刷新失败，请查看卡片提示"))
         } else {

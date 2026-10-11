@@ -8,7 +8,7 @@ use super::{transport::Api, Credential, Record};
 use serde_json::json;
 use serde_json::Value;
 
-#[derive(Clone, Default, serde::Serialize)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuotaItem {
     pub label: String,

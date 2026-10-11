@@ -1,6 +1,7 @@
 import { ArrowUpRight, RefreshCw, Trash2 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { credentialQuotas, planLabel, resetLabel, type Credential } from "./data";
+import { credentialQuotas, resetLabel, type Credential } from "./data";
+import { PlanBadge } from "./PlanBadge";
 import type { CredentialsState } from "./useCredentials";
 function Quota({
   label,
@@ -60,7 +61,7 @@ export function CredentialCard({ c, state: s, preview, onDelete, selected, onSel
                   />
                 </header>
                 {c.provider === "codex" && <div className="credential-tags">
-                  <span className="plan-badge" data-plan={c.plan || "unknown"}>{planLabel(c.plan)}</span>
+                  <PlanBadge credential={c} />
                   <span className="reset-count" title={c.resetCountError || undefined}>
                     {c.resetCountError ? (c.resetAvailable == null ? "重置次数未获取" : `上次剩余 ${c.resetAvailable} 次 · 更新失败`) : c.resetAvailable == null ? "重置次数未查询" : `重置剩余 ${c.resetAvailable} 次`}
                   </span>
@@ -77,27 +78,17 @@ export function CredentialCard({ c, state: s, preview, onDelete, selected, onSel
                     <span>额度更新</span>
                     <p>
                       {c.quotaAt
-                        ? new Date(c.quotaAt * 1000).toLocaleTimeString(
+                        ? new Date(c.quotaAt * 1000).toLocaleString(
                             "zh-CN",
-                            { hour: "2-digit", minute: "2-digit" },
+                            { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" },
                           )
                         : "尚未查询"}
                     </p>
                   </div>
                 </div>
-                <p
-                  className={`quota-message ${c.quotaError ? "has-error" : ""}`}
-                >
-                  {c.quotaError
-                    ? `${c.quotaError}${c.quotaAt ? "（仍显示上次数据）" : ""}`
-                    : !c.supported
-                      ? "此凭证类型暂不支持额度查询"
-                      : !c.enabled
-                        ? "已停用，仍可查询额度"
-                        : c.quotaAt
-                          ? "额度以服务商返回为准"
-                          : "点击刷新获取真实额度"}
-                </p>
+                {(c.quotaError || !c.supported) && <p className={`quota-message ${c.quotaError ? "has-error" : ""}`}>
+                  {c.quotaError ? `${c.quotaError}${c.quotaAt ? "（仍显示上次数据）" : ""}` : "此凭证类型暂不支持额度查询"}
+                </p>}
                 <footer>
                   <button
                     className="text-button"

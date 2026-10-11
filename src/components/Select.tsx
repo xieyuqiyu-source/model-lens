@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Brand } from "./Common";
 export type SelectOption = {
@@ -6,6 +6,7 @@ export type SelectOption = {
   label: string;
   brand?: string;
   detail?: string;
+  badge?: ReactNode;
 };
 export function Select({
   label,
@@ -133,6 +134,7 @@ export function Select({
       >
         {selected?.brand && <Brand name={selected.brand} />}
         <span>{selected?.label || "请选择"}</span>
+        {selected?.badge}
         <ChevronDown size={13} />
       </button>
       <div
@@ -171,6 +173,7 @@ export function Select({
               <strong>{option.label}</strong>
               {option.detail && <small>{option.detail}</small>}
             </span>
+            {option.badge}
             {option.value === value && (
               <Check size={14} className="option-check" />
             )}

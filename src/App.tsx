@@ -164,11 +164,11 @@ export default function App() {
                 <RefreshCw className={services.busy ? "spin" : ""} />
               </button>
               <button
-                className="text-button"
+                className="icon-button"
+                aria-label="历史"
                 onClick={() => setModal("history")}
               >
                 <History size={15} />
-                历史
               </button>
               <button
                 className="icon-button"

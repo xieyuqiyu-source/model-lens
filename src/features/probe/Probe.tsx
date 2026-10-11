@@ -1,4 +1,5 @@
 import { Copy, RefreshCw } from "lucide-react";
+import { PlanBadge } from "../credentials/PlanBadge";
 import { Select } from "../../components/Select";
 import { Disclosure } from "../../components/Disclosure";
 import { ProbeResult } from "./ProbeResult";
@@ -68,7 +69,7 @@ export function Probe(p: Props) {
             onChange={s.setCredentialId}
             options={[
               { value: "", label: "全部已启用凭证" },
-              ...s.available.map((c) => ({ value: c.id, label: c.name, brand: c.brand, detail: c.provider })),
+              ...s.available.map((c) => ({ value: c.id, label: c.name, brand: c.brand, detail: c.provider, badge: <PlanBadge credential={c} /> })),
             ]}
           />
         </label>
@@ -210,7 +211,7 @@ export function Probe(p: Props) {
       )}
       <footer className="probe-foot">
         自动检测
-        <span>本机预览版 0.2.14</span>
+        <span>本机预览版 0.2.15</span>
       </footer>
     </section>
   );

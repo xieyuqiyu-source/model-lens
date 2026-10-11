@@ -11,6 +11,7 @@ import {
 import { Brand, Toggle } from "../../components/Common";
 import { activeCredentialsFirst, compactQuota, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
+import { PlanBadge } from "./PlanBadge";
 import { CredentialCard } from "./CredentialCard";
 import { CredentialTools } from "./CredentialTools";
 import { BatchDeleteDialog } from "./BatchDeleteDialog";
@@ -58,12 +59,13 @@ export function CredentialRows({
             data-quota={quota.value === null ? "missing" : "known"}
             data-error={Boolean(c.quotaError)}
             style={{ "--quota-width": `${quota.value ?? 0}%` } as CSSProperties}
-            title={`${c.name} · ${c.provider} · ${quota.description}${c.quotaError ? ` · ${c.quotaError}（仍显示上次数据）` : ""}`}
+            title={`${c.name} · ${c.provider} · ${quota.description}${c.quotaAt ? ` · ${new Date(c.quotaAt * 1000).toLocaleString("zh-CN")} 更新` : ""}${c.quotaError ? ` · ${c.quotaError}（仍显示上次数据）` : ""}`}
           >
             <span className="account-fill" />
             <span className="account-label">{c.name}</span>
             <span className="account-label account-label-on-fill" aria-hidden="true">{c.name}</span>
           </div>
+          <PlanBadge credential={c} />
           <span className="period">
             {quota.period}
           </span>
@@ -170,14 +172,12 @@ export function Credentials(p: Props) {
           </div>
           <div className="section-foot">
             <span>已连接 127.0.0.1:{s.port}</span>
-            <span>缺失额度不会显示为 0%</span>
           </div>
         </>
       ) : (
         <>
           <CredentialRows state={s} onConnect={p.onConnect} />
           <div className="batch">
-            <span className="muted">刷新所有支持的凭证，包含已停用账号</span>
             <button
               className="button"
               disabled={!s.connected || s.busy || s.stale}
@@ -191,9 +191,6 @@ export function Credentials(p: Props) {
             菜单栏快捷入口
             <ArrowUpRight size={14} />
           </button>
-          <span className="preview-caption">
-            账号开关立即生效
-          </span>
         </>
       )}
       {batchDeleting && <BatchDeleteDialog credentials={batchDeleting} state={s} onClose={() => { setBatchDeleting(null); setSelected([]); }} />}

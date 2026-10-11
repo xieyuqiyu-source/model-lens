@@ -2,7 +2,7 @@ use super::*;
 use crate::management::{normalize, tests::server, Session};
 
 fn record(provider: &str) -> Record {
-    normalize(&json!({"files":[{"name":"mock.json","auth_index":"idx","provider":provider,"disabled":true,"account_type":"oauth","project_id":"synthetic-project"}]}))
+    normalize(&json!({"files":[{"name":"mock.json","auth_index":"idx","provider":provider,"disabled":true,"account_type":"oauth","email":"demo@example.invalid","project_id":"synthetic-project"}]}))
         .unwrap().remove("mock.json:idx").unwrap()
 }
 fn reply(body: Value) -> (u16, Value) {
@@ -188,7 +188,7 @@ fn refresh_failure_and_list_reload_keep_new_provider_last_quota() {
         (200, json!({"status_code":429,"body":"private"})),
         (
             200,
-            json!({"files":[{"name":"mock.json","auth_index":"idx","provider":"xai","disabled":true}]}),
+            json!({"files":[{"name":"mock.json","auth_index":"idx","provider":"xai","disabled":true,"email":"demo@example.invalid","project_id":"synthetic-project"}]}),
         ),
     ]);
     let mut session = Session {
