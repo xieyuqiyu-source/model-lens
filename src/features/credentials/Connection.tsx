@@ -19,6 +19,13 @@ export function Connection({
           <p className="muted">
             只连接本机管理接口。厂商 Token 由 CLIProxy 管理。
           </p>
+          <div className="saved-connection">
+            <p className="muted">{state.saved ? "已记住本机连接，重启或更新后会自动连接。" : "连接成功后自动记住，仅保存在这台 Mac，不同步到云端。"}</p>
+            {(state.saved || state.error) && <div className="actions">
+              {!state.connected && <button type="button" className="text-button" disabled={state.busy} onClick={async () => { if (await state.restore()) dismiss(); }}>使用本地记录重连</button>}
+              <button type="button" className="text-button" disabled={state.busy} onClick={() => void state.forget()}>忘记密钥并断开</button>
+            </div>}
+          </div>
           <form
             ref={form}
             className="connection-form"
@@ -49,7 +56,7 @@ export function Connection({
               </div>
             </label>
             <label>
-              管理密钥
+              {state.saved ? "更换管理密钥" : "管理密钥"}
               <input
                 name="key"
                 aria-label="管理密钥"
@@ -63,7 +70,7 @@ export function Connection({
               />
             </label>
             <p className="muted">
-              仅用于本次运行，退出应用后清除。不会读取已有认证文件或保存到浏览器存储。
+              密钥保存在本机钥匙串，不回填到输入框，不写入日志或浏览器存储。断开连接会保留记录。
             </p>
             {state.error && (
               <p className="notice" role="alert">

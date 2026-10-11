@@ -4,7 +4,7 @@ use std::{
     net::TcpListener,
     thread,
 };
-fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec<String>>) {
+pub(super) fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec<String>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = thread::spawn(move || {
@@ -41,7 +41,7 @@ fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec<String>>) 
     });
     (port, task)
 }
-fn files(disabled: bool) -> Value {
+pub(super) fn files(disabled: bool) -> Value {
     json!({"files":[{"name":"mock.json","auth_index":"idx","provider":"codex","email":"demo@example.invalid","disabled":disabled}]})
 }
 #[test]

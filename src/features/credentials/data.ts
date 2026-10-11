@@ -15,6 +15,7 @@ export type Credential = {
 };
 export type ManagementSnapshot = {
   connected: boolean;
+  saved: boolean;
   port: number;
   busy: boolean;
   stale: boolean;

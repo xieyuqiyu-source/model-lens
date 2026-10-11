@@ -112,6 +112,8 @@ fn main() {
             management::management_snapshot,
             management::management_connect,
             management::management_disconnect,
+            management::management_restore,
+            management::management_forget,
             management::credentials_list,
             management::credential_toggle,
             management::quota_refresh

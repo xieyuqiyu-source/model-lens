@@ -5,8 +5,9 @@ import { managementApi } from "./api";
 import type { ManagementSnapshot } from "./data";
 const empty: ManagementSnapshot = {
   connected: false,
+  saved: false,
   port: 8317,
-  busy: false,
+  busy: native,
   stale: false,
   credentials: [],
   error: null,
@@ -39,7 +40,10 @@ export function useCredentials() {
         const initial = await managementApi.snapshot();
         if (!cancelled) apply(initial);
       })().catch(() => {
-        if (mounted.current) setError("无法读取管理连接状态");
+        if (!cancelled && mounted.current) {
+          setSnapshot((old) => ({ ...old, busy: false }));
+          setError("无法读取管理连接状态，请重试连接");
+        }
       });
     return () => {
       cancelled = true;
@@ -72,6 +76,8 @@ export function useCredentials() {
     connect: (port: number, key: string) =>
       run(() => managementApi.connect(port, key)),
     disconnect: () => run(managementApi.disconnect),
+    restore: () => run(managementApi.restore),
+    forget: () => run(managementApi.forget),
     refresh: () => run(managementApi.list),
     refreshQuota: (id: string | null = null) =>
       run(() => managementApi.quota(id)),

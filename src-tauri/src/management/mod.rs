@@ -1,3 +1,4 @@
+mod local_connection;
 mod quota;
 mod transport;
 use reqwest::Method;
@@ -32,6 +33,7 @@ pub struct Credential {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub connected: bool,
+    pub saved: bool,
     pub port: u16,
     pub busy: bool,
     pub stale: bool,
@@ -49,6 +51,7 @@ struct Record {
 }
 #[derive(Default)]
 struct Session {
+    initialized: bool,
     api: Option<Api>,
     records: HashMap<String, Record>,
     snapshot: Snapshot,
@@ -251,7 +254,16 @@ pub async fn management_snapshot(app: tauri::AppHandle) -> Result<Snapshot, Stri
         app.state::<Management>()
             .0
             .lock()
-            .map(|s| s.snapshot.clone())
+            .map(|mut s| {
+                if !s.initialized {
+                    s.snapshot.busy = true;
+                    s.publish(&app);
+                    s.snapshot.error = s.restore(&local_connection::LocalKeychain).err();
+                    s.snapshot.busy = false;
+                    s.publish(&app);
+                }
+                s.snapshot.clone()
+            })
             .map_err(|_| "管理状态不可用".into())
     })
     .await
@@ -264,32 +276,32 @@ pub async fn management_connect(
     key: String,
 ) -> Result<Snapshot, String> {
     operate(app, move |s, _| {
-        s.api = None;
-        s.records.clear();
-        s.snapshot.connected = false;
-        s.snapshot.stale = false;
-        s.snapshot.port = port;
-        let api = Api::new(port, key)?;
-        s.api = Some(api);
-        if let Err(e) = s.reload() {
-            s.api = None;
-            return Err(e);
-        }
-        s.snapshot.connected = true;
-        Ok(())
+        s.connect_and_save(port, key, &local_connection::LocalKeychain)
     })
     .await
 }
 #[tauri::command]
 pub async fn management_disconnect(app: tauri::AppHandle) -> Result<Snapshot, String> {
     operate(app, |s, _| {
-        s.api = None;
-        s.records.clear();
-        s.snapshot.connected = false;
-        s.snapshot.stale = false;
+        s.disconnect();
         Ok(())
     })
     .await
+}
+#[tauri::command]
+pub async fn management_restore(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    operate(app, |s, _| {
+        s.restore(&local_connection::LocalKeychain)?;
+        if !s.snapshot.saved {
+            return Err("尚无本地连接记录，请输入管理密钥".into());
+        }
+        Ok(())
+    })
+    .await
+}
+#[tauri::command]
+pub async fn management_forget(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    operate(app, |s, _| s.forget(&local_connection::LocalKeychain)).await
 }
 #[tauri::command]
 pub async fn credentials_list(app: tauri::AppHandle) -> Result<Snapshot, String> {
