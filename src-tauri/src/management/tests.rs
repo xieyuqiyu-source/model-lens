@@ -34,7 +34,11 @@ pub(super) fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec
                 }
             }
             requests.push(String::from_utf8(request).unwrap());
-            let body = body.to_string();
+            let body = if status == 204 {
+                String::new()
+            } else {
+                body.to_string()
+            };
             write!(stream,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
         }
         requests

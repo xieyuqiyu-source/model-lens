@@ -17,7 +17,7 @@ window.__TAURI_INTERNALS__ = {
  async invoke(cmd, args) {
   if(cmd === 'plugin:event|listen') return 1;
   if(cmd === 'discover_services') return {services:[],checkedAt:1,statusKnown:false,warning:null};
-  if(cmd === 'management_snapshot') return {connected:true,saved:true,port:8317,busy:false,stale:false,error:null,revision:1,credentials:[0,1].map(i=>({id:`mock-${i}`,name:`sample-${i}@example.invalid`,brand:'openai',provider:'codex',enabled:true,editable:true,supported:true,probeSupported:true,five:null,week:null,resetFive:'',resetWeek:'',quotaAt:null,quotaError:null}))};
+  if(cmd === 'management_snapshot') return {connected:true,saved:true,port:8317,busy:false,stale:false,error:null,revision:1,credentials:[0,1].map(i=>({id:`mock-${i}`,name:`sample-${i}@example.invalid`,brand:'openai',provider:'codex',enabled:true,editable:true,deletable:true,fileName:`mock-${i}.json`,deleteToken:`mock-${i}`,supported:true,probeSupported:true,five:null,week:null,resetFive:'',resetWeek:'',quotaAt:null,quotaError:null}))};
   if(cmd === 'probe_models') return [{id:'test-a',name:'Test A',effort:null},{id:'test-b',name:'Test B',effort:null}];
   if(cmd === 'probe_sample') {
    window.mockCalls.push(args);
@@ -44,6 +44,11 @@ with sync_playwright() as p:
   page.goto(BASE_URL)
   start=page.get_by_role('button',name='开始检测',exact=True)
   expect(start).to_be_enabled()
+  assert page.evaluate('mockCalls.length')==0
+  page.get_by_role('button',name='凭证优先',exact=True).click()
+  card=page.locator('.credential-card').filter(has_text='sample-1@example.invalid')
+  card.get_by_role('button',name='单独检测',exact=True).click()
+  expect(page.get_by_role('button',name=re.compile('选择探查凭证：sample-1'))).to_be_visible()
   assert page.evaluate('mockCalls.length')==0
   page.get_by_role('button',name='选择模型：Test A',exact=True).click()
   page.get_by_role('option',name=re.compile('Test B')).click()

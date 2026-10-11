@@ -78,7 +78,12 @@ export default function App() {
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
   }, [isTray, modal]);
-  const preview = () => { changeFocus("probe"); setToast("请在模型探查选择凭证后开始检测"); };
+  const preview = (id: string) => {
+    if (probe.busy) { setToast("请等待当前检测结束"); return; }
+    probe.setCredentialId(id);
+    setMode("auto");
+    changeFocus("probe");
+  };
   const status = (
     <button
       className="service-status"
@@ -220,7 +225,7 @@ export default function App() {
       {modal === "service" && (
         <ServicePanel state={services} onClose={() => setModal("")} />
       )}
-      {modal === "import" && <ImportDialog onClose={() => setModal("")} />}
+      {modal === "import" && <ImportDialog state={credentials} onClose={() => setModal("")} />}
       {modal === "history" && (
         <Modal title="检测历史" onClose={() => setModal("")}>
           <ProbeHistory state={probe} onChoose={() => { setModal(""); changeFocus("probe"); }} />
@@ -236,8 +241,8 @@ export default function App() {
             {rows}
             <div className="tray-bottom">
               <span>真实凭证列表</span>
-              <button className="text-button" onClick={preview}>
-                批量检测
+              <button className="text-button" onClick={() => { setModal(""); changeFocus("probe"); }}>
+                模型探查
               </button>
             </div>
           </div>

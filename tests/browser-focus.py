@@ -147,7 +147,8 @@ with sync_playwright() as p:
                 for name, title in [('CLIProxy 状态未知', '本机 CLIProxy'), ('历史', '检测历史'), ('管理连接', '连接 CLIProxy'), ('菜单栏快捷入口', '菜单栏面板预览')]:
                     check_dialog(page, page.get_by_role('button', name=name, exact=True), title)
                 page.get_by_role('button', name='凭证优先', exact=True).click()
-                check_dialog(page, page.get_by_role('button', name='导入 JSON', exact=True), '导入 JSON 凭证')
+                # Import now requires a connection; connected dialog flows use synthetic IPC in browser-credentials.py.
+                expect(page.get_by_role('button', name='导入 JSON', exact=True)).to_be_disabled()
                 page.get_by_role('button', name='探查优先', exact=True).click()
                 for name in ['检测提示词', '原始回答与采样详情']:
                     control = page.get_by_role('button', name=name, exact=True)

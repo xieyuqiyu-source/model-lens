@@ -116,6 +116,8 @@ fn main() {
             management::management_forget,
             management::credentials_list,
             management::credential_toggle,
+            management::credential_import,
+            management::credential_delete,
             management::quota_refresh,
             management::probe::probe_models,
             management::probe::probe_sample

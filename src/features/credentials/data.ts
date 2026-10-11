@@ -5,6 +5,9 @@ export type Credential = {
   provider: string;
   enabled: boolean;
   editable: boolean;
+  deletable: boolean;
+  fileName: string;
+  deleteToken: string;
   supported: boolean;
   probeSupported: boolean;
   five: number | null;
