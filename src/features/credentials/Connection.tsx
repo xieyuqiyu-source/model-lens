@@ -70,7 +70,7 @@ export function Connection({
               />
             </label>
             <p className="muted">
-              密钥保存在本机钥匙串，不回填到输入框，不写入日志或浏览器存储。断开连接会保留记录。
+              密钥保存在本机文件，仅当前用户可读写，不回填输入框或写入日志。断开连接会保留记录。
             </p>
             {state.error && (
               <p className="notice" role="alert">

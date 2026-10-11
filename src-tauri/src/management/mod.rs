@@ -258,7 +258,10 @@ pub async fn management_snapshot(app: tauri::AppHandle) -> Result<Snapshot, Stri
                 if !s.initialized {
                     s.snapshot.busy = true;
                     s.publish(&app);
-                    s.snapshot.error = s.restore(&local_connection::LocalKeychain).err();
+                    s.initialized = true;
+                    s.snapshot.error = local_connection::LocalFile::for_app(&app)
+                        .and_then(|store| s.restore(&store))
+                        .err();
                     s.snapshot.busy = false;
                     s.publish(&app);
                 }
@@ -275,8 +278,8 @@ pub async fn management_connect(
     port: u16,
     key: String,
 ) -> Result<Snapshot, String> {
-    operate(app, move |s, _| {
-        s.connect_and_save(port, key, &local_connection::LocalKeychain)
+    operate(app, move |s, app| {
+        s.connect_and_save(port, key, &local_connection::LocalFile::for_app(app)?)
     })
     .await
 }
@@ -290,8 +293,8 @@ pub async fn management_disconnect(app: tauri::AppHandle) -> Result<Snapshot, St
 }
 #[tauri::command]
 pub async fn management_restore(app: tauri::AppHandle) -> Result<Snapshot, String> {
-    operate(app, |s, _| {
-        s.restore(&local_connection::LocalKeychain)?;
+    operate(app, |s, app| {
+        s.restore(&local_connection::LocalFile::for_app(app)?)?;
         if !s.snapshot.saved {
             return Err("尚无本地连接记录，请输入管理密钥".into());
         }
@@ -301,7 +304,10 @@ pub async fn management_restore(app: tauri::AppHandle) -> Result<Snapshot, Strin
 }
 #[tauri::command]
 pub async fn management_forget(app: tauri::AppHandle) -> Result<Snapshot, String> {
-    operate(app, |s, _| s.forget(&local_connection::LocalKeychain)).await
+    operate(app, |s, app| {
+        s.forget(&local_connection::LocalFile::for_app(app)?)
+    })
+    .await
 }
 #[tauri::command]
 pub async fn credentials_list(app: tauri::AppHandle) -> Result<Snapshot, String> {

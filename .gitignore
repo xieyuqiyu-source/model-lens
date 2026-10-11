@@ -18,3 +18,7 @@ src-tauri/target/
 src-tauri/gen/
 .impeccable/
 *.tsbuildinfo
+
+# 本机管理连接缓存（不得提交）
+connection.json
+.connection-*

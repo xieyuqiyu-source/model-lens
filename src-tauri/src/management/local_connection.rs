@@ -12,92 +12,96 @@ pub(super) trait ConnectionStore {
     fn save(&self, connection: &SavedConnection) -> Result<(), String>;
     fn forget(&self) -> Result<(), String>;
 }
-pub(super) struct LocalKeychain;
-#[cfg(target_os = "macos")]
-mod mac {
-    use super::*;
-    use security_framework::passwords::{
-        delete_generic_password_options, generic_password, set_generic_password_options,
-        PasswordOptions,
-    };
-    const SERVICE: &str = "io.modellens.desktop.management";
-    const ACCOUNT: &str = "local-connection";
-    const NOT_FOUND: i32 = -25300;
-    fn options(service: &str) -> PasswordOptions {
-        let mut options = PasswordOptions::new_generic_password(service, ACCOUNT);
-        options.set_access_synchronized(Some(false));
-        options
-    }
-    fn load(service: &str) -> Result<Option<SavedConnection>, String> {
-        match generic_password(options(service)) {
-            Ok(bytes) => decode(&bytes).map(Some),
-            Err(e) if e.code() == NOT_FOUND => Ok(None),
-            Err(_) => Err("无法读取本机保存的连接，请解锁钥匙串后重试，或重新输入密钥".into()),
-        }
-    }
-    fn save(service: &str, connection: &SavedConnection) -> Result<(), String> {
-        let bytes = serde_json::to_vec(connection).map_err(|_| "无法保存本机连接")?;
-        set_generic_password_options(&bytes, options(service))
-            .map_err(|_| "连接成功，但本机保存失败；重启后仍使用此前保存的连接（若有）".into())
-    }
-    fn forget(service: &str) -> Result<(), String> {
-        match delete_generic_password_options(options(service)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.code() == NOT_FOUND => Ok(()),
-            Err(_) => Err("无法删除本机密钥，已保留当前连接；请解锁钥匙串后重试".into()),
-        }
-    }
-    impl ConnectionStore for LocalKeychain {
-        fn load(&self) -> Result<Option<SavedConnection>, String> {
-            load(SERVICE)
-        }
-        fn save(&self, connection: &SavedConnection) -> Result<(), String> {
-            save(SERVICE, connection)
-        }
-        fn forget(&self) -> Result<(), String> {
-            forget(SERVICE)
-        }
-    }
-    #[test]
-    #[ignore = "仅显式执行：使用独立测试条目验证本机钥匙串，不访问真实连接"]
-    fn keychain_roundtrip() {
-        let service = format!(
-            "io.modellens.test.{}.{}",
-            std::process::id(),
-            super::super::now()
-        );
-        let connection = SavedConnection {
-            port: 12345,
-            key: "synthetic-test-only".into(),
-        };
-        assert!(load(&service).unwrap().is_none());
-        save(&service, &connection).unwrap();
-        let restored = load(&service).unwrap().unwrap();
-        assert!(restored.port == connection.port && restored.key == connection.key);
-        save(
-            &service,
-            &SavedConnection {
-                port: 12346,
-                key: "synthetic-replacement".into(),
-            },
-        )
-        .unwrap();
-        assert!(load(&service).unwrap().unwrap().port == 12346);
-        forget(&service).unwrap();
-        assert!(load(&service).unwrap().is_none());
-        forget(&service).unwrap();
+pub(super) struct LocalFile {
+    path: std::path::PathBuf,
+}
+impl LocalFile {
+    pub(super) fn for_app(app: &tauri::AppHandle) -> Result<Self, String> {
+        use tauri::Manager;
+        let directory = app
+            .path()
+            .app_data_dir()
+            .map_err(|_| "无法定位本机连接目录")?;
+        Ok(Self {
+            path: directory.join("connection.json"),
+        })
     }
 }
-#[cfg(not(target_os = "macos"))]
-impl ConnectionStore for LocalKeychain {
+impl ConnectionStore for LocalFile {
     fn load(&self) -> Result<Option<SavedConnection>, String> {
-        Ok(None)
+        use std::io::Read;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        let file = match options.open(&self.path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("无法读取本机连接文件，请检查数据目录权限或重新输入密钥".into()),
+        };
+        if !file
+            .metadata()
+            .map_err(|_| "无法读取本机连接文件")?
+            .is_file()
+        {
+            return Err("本机连接记录无效，请忘记后重新连接".into());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .map_err(|_| "无法保护本机连接文件")?;
+        }
+        let mut bytes = Vec::new();
+        file.take(65537)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "无法读取本机连接文件")?;
+        decode(&bytes).map(Some)
     }
-    fn save(&self, _: &SavedConnection) -> Result<(), String> {
-        Err("此平台尚未支持本地密钥保存".into())
+    fn save(&self, connection: &SavedConnection) -> Result<(), String> {
+        use std::{fs, io::Write};
+        // Write beside the destination, then atomically replace it. A failed write keeps
+        // the previous connection intact; temporary files are removed on normal errors.
+        let save = || -> Result<(), Box<dyn std::error::Error>> {
+            let directory = self.path.parent().ok_or("invalid connection directory")?;
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            builder.create(directory)?;
+            if !fs::symlink_metadata(directory)?.file_type().is_dir() {
+                return Err("invalid connection directory".into());
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
+            }
+            let bytes = serde_json::to_vec(connection)?;
+            // NamedTempFile is created exclusively with mode 0600 on Unix.
+            let mut file = tempfile::Builder::new()
+                .prefix(".connection-")
+                .tempfile_in(directory)?;
+            file.write_all(&bytes)?;
+            file.as_file().sync_all()?;
+            file.persist(&self.path)?;
+            Ok(())
+        };
+        save()
+            .map_err(|_| "连接成功，但本机文件保存失败；重启后仍使用此前保存的连接（若有）".into())
     }
     fn forget(&self) -> Result<(), String> {
-        Ok(())
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err("无法删除本机连接文件，已保留当前连接；请检查数据目录权限".into()),
+        }
     }
 }
 fn decode(bytes: &[u8]) -> Result<SavedConnection, String> {
@@ -163,6 +167,115 @@ impl Session {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+    #[test]
+    fn local_file_roundtrip_permissions_and_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("app-data");
+        let store = LocalFile {
+            path: directory.join("connection.json"),
+        };
+        assert!(store.load().unwrap().is_none());
+        store
+            .save(&SavedConnection {
+                port: 12345,
+                key: "synthetic-one".into(),
+            })
+            .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+            assert_eq!(
+                std::fs::metadata(&store.path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        store
+            .save(&SavedConnection {
+                port: 12346,
+                key: "synthetic-two".into(),
+            })
+            .unwrap();
+        let restored = store.load().unwrap().unwrap();
+        assert!(restored.port == 12346 && restored.key == "synthetic-two");
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+        store.forget().unwrap();
+        assert!(store.load().unwrap().is_none());
+        store.forget().unwrap();
+    }
+    #[test]
+    fn damaged_or_oversized_file_is_preserved_and_redacted() {
+        let root = tempfile::tempdir().unwrap();
+        let store = LocalFile {
+            path: root.path().join("connection.json"),
+        };
+        for bytes in [
+            b"synthetic-private-broken-record".to_vec(),
+            vec![b'x'; 65537],
+        ] {
+            std::fs::write(&store.path, &bytes).unwrap();
+            assert!(store.load().err().unwrap() == "本机连接记录无效，请忘记后重新连接");
+            assert_eq!(std::fs::read(&store.path).unwrap(), bytes);
+        }
+        store.forget().unwrap();
+    }
+    #[test]
+    fn file_operation_errors_do_not_claim_success_or_leave_temporary_files() {
+        let root = tempfile::tempdir().unwrap();
+        let store = LocalFile {
+            path: root.path().join("connection.json"),
+        };
+        std::fs::create_dir(&store.path).unwrap();
+        assert!(store.load().is_err());
+        assert!(store
+            .save(&SavedConnection {
+                port: 12345,
+                key: "synthetic".into()
+            })
+            .is_err());
+        assert!(store.forget().is_err());
+        assert!(store.path.is_dir());
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn symlink_is_not_read_and_failed_save_preserves_previous_record() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("data");
+        let store = LocalFile {
+            path: directory.join("connection.json"),
+        };
+        store
+            .save(&SavedConnection {
+                port: 12345,
+                key: "synthetic-old".into(),
+            })
+            .unwrap();
+        let moved = root.path().join("moved");
+        std::fs::rename(&directory, &moved).unwrap();
+        symlink(&moved, &directory).unwrap();
+        assert!(store
+            .save(&SavedConnection {
+                port: 12346,
+                key: "synthetic-new".into()
+            })
+            .is_err());
+        let previous = LocalFile {
+            path: moved.join("connection.json"),
+        };
+        assert!(previous.load().unwrap().unwrap().key == "synthetic-old");
+        let link = LocalFile {
+            path: root.path().join("link.json"),
+        };
+        symlink(&previous.path, &link.path).unwrap();
+        assert!(link.load().is_err());
+        link.forget().unwrap();
+        assert!(previous.load().unwrap().is_some());
+    }
     #[derive(Default)]
     struct MemoryStore {
         value: RefCell<Option<SavedConnection>>,
@@ -193,7 +306,10 @@ mod tests {
             (200, super::super::tests::files(false)),
             (200, super::super::tests::files(false)),
         ]);
-        let store = MemoryStore::default();
+        let directory = tempfile::tempdir().unwrap();
+        let store = LocalFile {
+            path: directory.path().join("connection.json"),
+        };
         let mut first = Session::default();
         first
             .connect_and_save(port, "synthetic-key".into(), &store)
