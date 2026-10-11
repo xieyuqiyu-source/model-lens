@@ -105,6 +105,8 @@
 
 ## 开发和构建
 
+新工作区或编码助手接续时，先阅读 [AGENTS.md](AGENTS.md)，其中记录已确认设计、操作边界和当前交付状态。
+
 技术栈：**Tauri 2 + Rust + React + TypeScript + Vite**。凭证网络操作在 Rust 中，前端只接收白名单字段；不新增服务器或数据库。
 
 前置环境：macOS、Xcode Command Line Tools、Node.js 24、pnpm 10.10.0、Rust 1.89。依赖由 `pnpm-lock.yaml` 和 `src-tauri/Cargo.lock` 锁定。
