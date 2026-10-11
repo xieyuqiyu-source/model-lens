@@ -10,3 +10,11 @@ Thumbs.db
 !.env.example
 *.key
 *.pem
+
+# 开发依赖、构建和本地验收
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+.impeccable/
+*.tsbuildinfo

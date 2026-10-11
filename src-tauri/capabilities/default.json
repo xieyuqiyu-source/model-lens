@@ -1,0 +1,6 @@
+{
+  "identifier": "desktop",
+  "description": "主窗口与菜单栏仅具备窗口操作及只读进程发现入口",
+  "windows": ["main", "tray"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}
