@@ -16,11 +16,8 @@ export function Connection({
     <Modal title="连接 CLIProxy" onClose={onClose}>
       {(dismiss) => (
         <>
-          <p className="muted">
-            只连接本机管理接口。厂商 Token 由 CLIProxy 管理。
-          </p>
           <div className="saved-connection">
-            <p className="muted">{state.saved ? "已记住本机连接，重启或更新后会自动连接。" : "连接成功后自动记住，仅保存在这台 Mac，不同步到云端。"}</p>
+            <p className="muted">{state.saved ? "已保存本机连接。" : "连接成功后自动记住。"}</p>
             {(state.saved || state.error) && <div className="actions">
               {!state.connected && <button type="button" className="text-button" disabled={state.busy} onClick={async () => { if (await state.restore()) dismiss(); }}>使用本地记录重连</button>}
               <button type="button" className="text-button" disabled={state.busy} onClick={() => void state.forget()}>忘记密钥并断开</button>
@@ -66,11 +63,11 @@ export function Connection({
                 required
                 maxLength={8192}
                 disabled={state.busy}
-                placeholder="在这里输入，不要发到聊天里"
+                placeholder="输入 CLIProxy 管理密钥"
               />
             </label>
             <p className="muted">
-              密钥保存在本机钥匙串，不回填到输入框，不写入日志或浏览器存储。断开连接会保留记录。
+              密钥仅存本机钥匙串，不同步；断开连接保留记录。
             </p>
             {state.error && (
               <p className="notice" role="alert">

@@ -19,7 +19,8 @@ button:not(:disabled):active {
   scale: 0.98;
 }
 .switch:active,
-.segment button:active {
+.segment button:active,
+.disclosure-trigger:active {
   scale: 1;
 }
 .switch span {
@@ -148,8 +149,7 @@ button:not(:disabled):active {
   transition: rotate var(--motion-control) var(--motion-ease);
 }
 .select-trigger[aria-expanded="true"] {
-  border-color: var(--border);
-  background: var(--hover);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 .select-trigger[aria-expanded="true"] > svg:last-child {
   rotate: 180deg;
@@ -251,9 +251,6 @@ button:not(:disabled):active {
   text-align: left;
   font-size: 11px;
   border-radius: 8px;
-}
-.disclosure-trigger:hover {
-  background: var(--hover);
 }
 .disclosure-trigger > span:last-child {
   display: flex;

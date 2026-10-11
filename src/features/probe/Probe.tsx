@@ -61,11 +61,6 @@ export function Probe(p: Props) {
       <header className="section-heading">
         <div>
           <h1>模型探查</h1>
-          <p className="muted">
-            {p.compact
-              ? "当前配置与最近结果"
-              : "选择一个模型与凭证，查看参考指纹的匹配结果。"}
-          </p>
         </div>
         {!p.compact && (
           <Segment
@@ -146,17 +141,15 @@ export function Probe(p: Props) {
             <div className="manual-input">
               <div>
                 <h3>粘贴模型回答</h3>
-                <span className="muted">可来自任意外部模型</span>
+                <span className="muted">分析尚未接入</span>
               </div>
               <textarea
                 aria-label="外部模型回答"
+                rows={2}
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
-                placeholder="在这里粘贴回答，体验输入界面…"
+                placeholder="粘贴模型回答…"
               />
-              <span className="meta">
-                内容仅保留在当前窗口，分析内核将在下一阶段接入。
-              </span>
             </div>
           ) : (
             <article className="result">
@@ -205,19 +198,19 @@ export function Probe(p: Props) {
               </footer>
             </article>
           )}
-          <Disclosure title="检测提示词" hint="3 条 · 待接入">
+          <Disclosure title="检测提示词">
             <p className="muted">
-              接入检测内核后，这里将展示三条可展开、复制的检测提示词。
+              检测提示词尚未接入。
             </p>
           </Disclosure>
-          <Disclosure title="原始回答与采样详情" hint="查看">
-            <p className="muted">当前为界面预览，尚未发起真实采样。</p>
+          <Disclosure title="原始回答与采样详情">
+            <p className="muted">暂无真实采样记录。</p>
           </Disclosure>
         </>
       )}
       <footer className="probe-foot">
         上次使用：{p.mode === "auto" ? "自动检测" : "手动检测"}
-        <span>本机预览版 0.2.8</span>
+        <span>本机预览版 0.2.9</span>
       </footer>
     </section>
   );

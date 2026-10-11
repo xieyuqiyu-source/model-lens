@@ -21,7 +21,7 @@ test('外观偏好验证、损坏恢复及明暗解析', () => {
   assert.equal(resolveAppearance('dark', false), 'dark');
 });
 for (const [palette, modes] of Object.entries(themes)) for (const [mode, t] of Object.entries(modes)) {
-  test(`${palette}/${mode} 文字、操作、额度与焦点的对比`, () => {
+  test(`${palette}/${mode} 文字、操作、额度与主题色的对比`, () => {
     for (const [fg, bg, min] of [
       ...['paper','surface','hover','track'].flatMap(bg => [['text',bg,4.5], ['muted',bg,4.5]]),
       ['on-accent','accent',4.5], ['on-accent','accent-hover',4.5],

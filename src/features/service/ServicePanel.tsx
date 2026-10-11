@@ -10,7 +10,6 @@ export function ServicePanel({
 }) {
   return (
     <Modal title="本机 CLIProxy" onClose={onClose}>
-      <p className="muted">自动识别正在运行的服务，并记住程序与目录。</p>
       <div className="service-toolbar">
         <span className="status">
           <i className={state.running ? "online" : ""} />
@@ -74,7 +73,7 @@ export function ServicePanel({
         </div>
       )}
       <footer className="modal-note">
-        本阶段仅识别与记忆位置；已有服务继续由原来的方式管理。
+        请沿用原方式启停服务。
       </footer>
     </Modal>
   );
