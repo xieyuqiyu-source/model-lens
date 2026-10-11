@@ -11,6 +11,7 @@ import {
   Credentials,
   CredentialRows,
 } from "./features/credentials/Credentials";
+import { traySummary } from "./features/credentials/data";
 import { useCredentials } from "./features/credentials/useCredentials";
 import { Connection } from "./features/credentials/Connection";
 import { ImportDialog } from "./features/credentials/ImportDialog";
@@ -97,11 +98,7 @@ export default function App() {
           {rows}
           <div className="tray-bottom">
             <span>
-              {credentials.error
-                ? "连接或刷新异常，请打开主窗口"
-                : credentials.connected
-                  ? `${credentials.credentials.length} 个凭证`
-                  : "尚未连接"}
+              {traySummary(credentials)}
             </span>
             <button
               className="text-button"

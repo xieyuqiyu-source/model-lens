@@ -2,12 +2,12 @@ import {
   ArrowUpRight,
   PanelTop,
   RefreshCw,
-  Minus,
+  CircleAlert,
   Plug,
   ListRestart,
 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { resetLabel, type Credential } from "./data";
+import { activeCredentialsFirst, resetLabel, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 type Props = {
   state: CredentialsState;
@@ -75,12 +75,14 @@ export function CredentialRows({
           </button>
         </div>
       )}
-      {state.credentials.map((c) => (
+      {activeCredentialsFirst(state.credentials).map((c) => (
         <div className={`credential-row ${!c.enabled ? "off" : ""}`} key={c.id}>
           <Brand name={c.brand} />
           <div
             className={`account-bar ${c.five === null ? "weekly" : ""}`}
-            title={`${c.name} · ${c.provider}${c.quotaError ? ` · ${c.quotaError}` : ""}`}
+            data-quota={c.five === null && c.week === null ? "missing" : "known"}
+            data-error={Boolean(c.quotaError)}
+            title={`${c.name} · ${c.provider} · ${c.quotaError || (c.five !== null ? `5h 剩余 ${c.five}%` : c.week !== null ? `1w 剩余 ${c.week}%` : !c.enabled ? "已停用，额度未刷新" : !c.supported ? "此厂商额度暂未适配" : "额度尚未查询")}`}
           >
             <span
               className="account-fill"
@@ -89,9 +91,11 @@ export function CredentialRows({
             <span>{c.name}</span>
           </div>
           <span className="period">
-            {c.five !== null ? "5h" : c.week !== null ? "1w" : "—"}
+            {c.five !== null ? "5h" : c.week !== null ? "1w" : ""}
           </span>
-          <Minus size={12} aria-label="尚未检测模型" />
+          <span className="row-status" title={c.quotaError || undefined}>
+            {c.quotaError && <CircleAlert size={12} aria-label={c.quotaError} />}
+          </span>
           <button
             className="icon-button small"
             title={
