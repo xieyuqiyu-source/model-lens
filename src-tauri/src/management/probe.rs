@@ -1,21 +1,21 @@
-//! Probe-only adapter: fixed destinations, server-side credential selection, no token projection.
+//! CLIProxy owns provider selection, aliases and credential routing. Keys stay in Rust.
 mod response;
 #[cfg(test)]
 mod tests;
-use super::{Management, Record, Session};
+use super::{Management, Session};
 use reqwest::Method;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tauri::Manager;
 
 #[derive(Serialize)]
 pub struct Model {
     id: String,
     name: String,
-    effort: Option<String>,
+    brand: String,
 }
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Answer {
     text: String,
@@ -23,56 +23,84 @@ pub struct Answer {
     reported_model: String,
     elapsed_ms: u64,
 }
-fn record(session: &mut Session, id: &str) -> Result<Record, String> {
-    session.reload()?;
-    let row = session.records.get(id).ok_or("凭证已不存在，请重新选择")?;
-    if !row.row.enabled {
-        return Err("凭证已停用，未发起采样".into());
-    }
-    if !row.row.probe_supported {
-        return Err("自动探查仅支持已确认类型的 Codex / Claude OAuth 凭证，可使用手动检测".into());
-    }
-    Ok(row.clone())
-}
-fn models(session: &Session, record: &Record) -> Result<Vec<Model>, String> {
+fn client_key(session: &Session) -> Result<String, String> {
     let api = session.api.as_ref().ok_or("请先连接管理接口")?;
-    let query: String =
-        reqwest::Url::parse_with_params("http://localhost/", &[("name", &record.name)])
-            .map_err(|_| "凭证名称无效")?
-            .query()
-            .unwrap_or_default()
-            .into();
-    let path = if api.legacy {
-        "/auth-files/models"
-    } else {
-        "/credentials/models"
+    // User-authorized access to this one configuration field; never fetch the full config.
+    let value = api.call(
+        Method::GET,
+        if api.legacy {
+            "/api-keys"
+        } else {
+            "/config/access/api-keys"
+        },
+        None,
+    );
+    let value = match value {
+        Err(e) if e == "HTTP 404" => return Ok(String::new()),
+        result => result?,
     };
-    let value = api.call(Method::GET, &format!("{path}?{query}"), None)?;
-    let visible = parse_models(&value)?;
-    // api-call bypasses CLIProxy alias/prefix resolution; only send original IDs.
-    let path = if api.legacy {
-        "/model-definitions"
+    let keys = if api.legacy {
+        &value["api-keys"]
     } else {
-        "/routing/model-definitions"
+        &value
     };
-    let definitions = api.call(Method::GET, &format!("{path}/{}", record.provider), None)?;
-    let originals = parse_models(&definitions)?;
-    Ok(visible
+    if keys.is_null() {
+        return Ok(String::new());
+    }
+    let keys = keys.as_array().ok_or("客户端 API Key 配置格式异常")?;
+    if keys.is_empty() {
+        return Ok(String::new());
+    }
+    keys.iter()
+        .filter_map(Value::as_str)
+        .find(|key| {
+            !key.is_empty()
+                && key.len() <= 8192
+                && key.trim() == *key
+                && !key.chars().any(char::is_control)
+        })
+        .map(str::to_owned)
+        .ok_or("客户端 API Key 配置无效".into())
+}
+fn models(session: &Session, scope: &str, key: &str) -> Result<Vec<Model>, String> {
+    let api = session.api.as_ref().ok_or("请先连接管理接口")?;
+    if scope.len() > 1100 {
+        return Err("模型范围无效".into());
+    }
+    let allowed = if scope.is_empty() {
+        None
+    } else {
+        let record = session
+            .records
+            .get(scope)
+            .filter(|r| r.row.enabled)
+            .ok_or("凭证已停用或不存在，请选择其他模型范围")?;
+        let path = if api.legacy {
+            "/auth-files/models"
+        } else {
+            "/credentials/models"
+        };
+        let value = api.call_with_query(Method::GET, path, &[("name", &record.name)], None)?;
+        Some(parse_models(&value, "models")?)
+    };
+    let value = api.inference(key, None)?;
+    let rows = parse_models(&value, "data")?;
+    Ok(rows
         .into_iter()
-        .filter_map(|mut model| {
-            let original = originals.iter().find(|m| m.id == model.id)?;
-            model.effort = original.effort.clone();
-            Some(model)
+        .filter(|m| {
+            allowed
+                .as_ref()
+                .is_none_or(|list| list.iter().any(|a| a.id == m.id))
         })
         .collect())
 }
-fn parse_models(value: &Value) -> Result<Vec<Model>, String> {
-    let rows = value["models"].as_array().ok_or("模型列表格式异常")?;
+fn parse_models(value: &Value, field: &str) -> Result<Vec<Model>, String> {
+    let rows = value[field].as_array().ok_or("模型列表格式异常")?;
     let mut output = Vec::new();
-    for row in rows.iter().take(1000) {
+    for row in rows {
         let id = row["id"].as_str().unwrap_or_default();
         if id.is_empty()
-            || id.len() > 200
+            || id.len() > 512
             || id.chars().any(char::is_control)
             || output.iter().any(|m: &Model| m.id == id)
         {
@@ -85,88 +113,72 @@ fn parse_models(value: &Value) -> Result<Vec<Model>, String> {
             .chars()
             .take(200)
             .collect();
-        let levels = row["thinking"]["levels"].as_array();
-        let effort = ["none", "minimal", "low"]
-            .into_iter()
-            .find(|level| levels.is_some_and(|l| l.iter().any(|v| v.as_str() == Some(level))))
-            .map(str::to_owned);
+        let brand = match row["owned_by"].as_str().unwrap_or_default() {
+            "openai" | "codex" => "openai",
+            "anthropic" | "claude" => "claude",
+            "google" | "gemini" | "antigravity" => "gemini",
+            "deepseek" => "deepseek",
+            _ => "unknown",
+        }
+        .into();
         output.push(Model {
             id: id.into(),
             name,
-            effort,
+            brand,
         });
     }
+    output.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(output)
 }
-fn request(record: &Record, model: &Model, prompt: &str) -> Value {
-    let mut header = json!({"Authorization":"Bearer $TOKEN$", "Content-Type":"application/json"});
-    let (url, mut body) = if record.provider == "codex" {
-        header["Accept"] = json!("text/event-stream");
-        header["User-Agent"] = json!("codex-tui/0.149.1");
-        header["Originator"] = json!("codex_cli_rs");
-        if !record.account_id.is_empty() {
-            header["Chatgpt-Account-Id"] = json!(record.account_id);
-        }
-        (
-            "https://chatgpt.com/backend-api/codex/responses",
-            json!({
-                "model":model.id,"instructions":"","store":false,"stream":true,
-                "input":[{"role":"user","content":[{"type":"input_text","text":prompt}]}]
-            }),
-        )
-    } else {
-        header["anthropic-version"] = json!("2023-06-01");
-        header["anthropic-beta"] = json!("oauth-2025-04-20");
-        (
-            "https://api.anthropic.com/v1/messages",
-            json!({
-                "model":model.id,"max_tokens":6000,"stream":false,
-                "messages":[{"role":"user","content":prompt}]
-            }),
-        )
-    };
-    if record.provider == "codex" {
-        if let Some(effort) = &model.effort {
-            body["reasoning"] = json!({"effort":effort});
-        }
-    }
-    json!({"auth_index":record.auth_index,"method":"POST","url":url,"header":header,"data":body.to_string()})
-}
-fn sample(session: &mut Session, id: &str, model: &str, prompt: &str) -> Result<Answer, String> {
-    if id.len() > 1100
+fn sample(session: &mut Session, scope: &str, model: &str, prompt: &str) -> Result<Answer, String> {
+    if scope.len() > 1100
         || model.is_empty()
-        || model.len() > 200
+        || model.len() > 512
+        || model.chars().any(char::is_control)
         || prompt.trim().is_empty()
         || prompt.chars().count() > 4000
     {
         return Err("探查参数无效".into());
     }
-    let record = record(session, id)?;
-    let selected = models(session, &record)?
-        .into_iter()
-        .find(|m| m.id == model)
-        .ok_or("该凭证已不支持所选模型，请刷新模型列表")?;
+    session.reload()?;
+    let key = client_key(session)?;
+    if !models(session, scope, &key)?.iter().any(|m| m.id == model) {
+        return Err("所选模型已不可用，请刷新模型列表".into());
+    }
     let started = Instant::now();
-    let value = session.api.as_ref().unwrap().call_with_timeout(
-        Method::POST,
-        "/requests/api-call",
-        Some(&request(&record, &selected, prompt)),
-        Duration::from_secs(120),
-    )?;
-    let mut answer = response::parse(&record.provider, &value)?;
+    let payload = json!({"model":model,"stream":false,"max_tokens":6000,
+        "messages":[{"role":"user","content":prompt}]});
+    let value = session
+        .api
+        .as_ref()
+        .unwrap()
+        .inference(&key, Some(&payload))?;
+    let mut answer = response::parse(&value)?;
     answer.elapsed_ms = started.elapsed().as_millis() as u64;
     Ok(answer)
 }
+fn lock_session(
+    state: &Management,
+    wait: bool,
+) -> Result<std::sync::MutexGuard<'_, Session>, String> {
+    if wait {
+        state.0.lock().map_err(|_| "管理会话不可用".into())
+    } else {
+        state
+            .0
+            .try_lock()
+            .map_err(|_| "管理操作正在进行，请稍后重试".into())
+    }
+}
 async fn run<T: Send + 'static>(
     app: tauri::AppHandle,
+    wait: bool,
     f: impl FnOnce(&mut Session) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Management>();
-        let mut session = state
-            .0
-            .try_lock()
-            .map_err(|_| "管理操作正在进行，请稍后重试")?;
+        // Catalog reads from both windows queue; paid sampling never retries or queues.
+        let mut session = lock_session(&state, wait)?;
         session.snapshot.busy = true;
         session.publish(&app);
         let result = f(&mut session);
@@ -179,9 +191,10 @@ async fn run<T: Send + 'static>(
 }
 #[tauri::command]
 pub async fn probe_models(app: tauri::AppHandle, id: String) -> Result<Vec<Model>, String> {
-    run(app, move |s| {
-        let row = record(s, &id)?;
-        models(s, &row)
+    run(app, true, move |s| {
+        s.reload()?;
+        let key = client_key(s)?;
+        models(s, &id, &key)
     })
     .await
 }
@@ -192,5 +205,5 @@ pub async fn probe_sample(
     model: String,
     prompt: String,
 ) -> Result<Answer, String> {
-    run(app, move |s| sample(s, &id, &model, &prompt)).await
+    run(app, false, move |s| sample(s, &id, &model, &prompt)).await
 }

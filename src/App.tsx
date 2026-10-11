@@ -58,7 +58,6 @@ export default function App() {
   useEffect(() => () => workspaceMotion.cancel(), [workspaceMotion]);
   const changeFocus = (value: string) =>
     workspaceMotion.run(() => flushSync(() => setFocus(value)));
-  const [mode, setMode] = usePreference("mode", "auto");
   const credentials = useCredentials();
   const probe = useProbe(credentials);
   const [modal, setModal] = useState("");
@@ -81,7 +80,6 @@ export default function App() {
   const preview = (id: string) => {
     if (probe.busy) { setToast("请等待当前检测结束"); return; }
     probe.setCredentialId(id);
-    setMode("auto");
     changeFocus("probe");
   };
   const status = (
@@ -193,8 +191,6 @@ export default function App() {
               connected={credentials.connected}
               managementBusy={credentials.busy}
               stale={credentials.stale}
-              mode={mode}
-              setMode={setMode}
             />
             <Credentials
               state={credentials}

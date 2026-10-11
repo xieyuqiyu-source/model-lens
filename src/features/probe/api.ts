@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Detection, Sample } from "./analysis";
-export type ProbeModel = { id: string; name: string; effort: string | null };
+export type ProbeModel = { id: string; name: string; brand: string };
 export type Answer = {
   text: string;
   finish: string;

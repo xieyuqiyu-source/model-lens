@@ -94,8 +94,8 @@ export function CredentialCard({ c, state: s, preview, onDelete }: {
                     <RefreshCw size={13} />
                     刷新额度
                   </button>
-                  <button className="text-button" disabled={s.busy || s.stale || !c.enabled || !c.probeSupported} onClick={() => preview(c.id)}>
-                    单独检测
+                  <button className="text-button" disabled={s.busy || s.stale || !c.enabled} onClick={() => preview(c.id)}>
+                    探查模型
                     <ArrowUpRight size={12} />
                   </button>
                   <button className="icon-button small credential-delete" aria-label={`删除 ${c.name}`} title={c.deletable ? "删除凭证" : "此凭证没有可删除的独立文件"}

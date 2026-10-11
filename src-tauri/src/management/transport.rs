@@ -45,15 +45,6 @@ impl Api {
     ) -> Result<Value, String> {
         self.call_request(method, path, query, body, Duration::from_secs(25))
     }
-    pub fn call_with_timeout(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<&Value>,
-        timeout: Duration,
-    ) -> Result<Value, String> {
-        self.call_request(method, path, &[], body, timeout)
-    }
     fn call_request(
         &self,
         method: Method,
@@ -91,6 +82,33 @@ impl Api {
         if let Some(body) = body {
             request = request.json(body);
         }
+        Self::send(request)
+    }
+    pub fn inference(&self, key: &str, body: Option<&Value>) -> Result<Value, String> {
+        let (method, path, timeout) = if body.is_some() {
+            (Method::POST, "/v1/chat/completions", 120)
+        } else {
+            (Method::GET, "/v1/models", 25)
+        };
+        let mut request = self
+            .client
+            .request(method, format!("http://127.0.0.1:{}{path}", self.port))
+            .timeout(Duration::from_secs(timeout));
+        if !key.is_empty() {
+            request = request.bearer_auth(key);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        Self::send(request).map_err(|e| {
+            if e == "管理认证失败，请核对管理密钥及本机访问权限" {
+                "CLIProxy 客户端认证失败，请检查客户端 API Key 配置".into()
+            } else {
+                e
+            }
+        })
+    }
+    fn send(request: reqwest::blocking::RequestBuilder) -> Result<Value, String> {
         let response = request
             .send()
             .map_err(|_| "无法连接本机 CLIProxy，或请求已超时".to_owned())?;

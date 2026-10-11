@@ -27,7 +27,7 @@ export function ProbeHistory({
             >
               <span>{r.analysis.prediction_name}</span>
               <small>
-                {r.source === "manual" ? "手动" : r.model} ·{" "}
+                {r.model} ·{" "}
                 {new Date(r.at).toLocaleTimeString("zh-CN")} ·{" "}
                 {r.analysis.used_outputs}/3
               </small>

@@ -391,19 +391,6 @@ details p {
 .compact .probe-form label {
   margin-bottom: 16px;
 }
-.compact .credential-choice {
-  display: none;
-}
-.compact-account {
-  display: flex;
-  justify-content: space-between;
-  margin: 20px 0 38px;
-}
-.compact-account > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
 .compact .start {
   width: 100%;
 }
@@ -650,18 +637,6 @@ details p {
   font-size: 10px;
   margin-top: 12px;
 }
-.manual-input {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 20px;
-}
-.manual-input > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.manual-input textarea,
 .json-input {
   width: 100%;
   resize: vertical;
@@ -670,10 +645,6 @@ details p {
   background: var(--surface);
   padding: 16px;
   line-height: 1.8;
-}
-.manual-input textarea {
-  display: block;
-  min-height: calc(2lh + 32px);
 }
 .json-input { min-height: 180px; }
 textarea::placeholder {

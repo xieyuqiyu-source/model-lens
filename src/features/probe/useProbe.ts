@@ -9,14 +9,12 @@ export function useProbe(credentials: ManagementSnapshot) {
   const [challenges, setChallenges] = useState<Challenge[]>(() =>
     generateChallenges(3),
   );
-  const [answers, setAnswers] = useState(["", "", ""]);
-  const [slot, setSlot] = useState("0");
   const [credentialId, setCredentialId] = useState("");
   const available = credentials.credentials.filter(
-    (c) => c.enabled && c.probeSupported,
+    (c) => c.enabled,
   );
   const credential =
-    available.find((c) => c.id === credentialId) ?? available[0];
+    available.find((c) => c.id === credentialId);
   const [models, setModels] = useState<ProbeModel[]>([]);
   const [modelId, setModelId] = useState(() => {
     try {
@@ -46,6 +44,7 @@ export function useProbe(credentials: ManagementSnapshot) {
   const active = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const id = credential?.id ?? "";
+  const enabledKey = available.map((c) => c.id).sort().join("\n");
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -57,29 +56,17 @@ export function useProbe(credentials: ManagementSnapshot) {
     let cancelled = false;
     setModels([]);
     setCatalogError("");
-    if (!native || !credentials.connected || !id) {
+    if (!native || !credentials.connected) {
       setCatalogBusy(false);
       return;
     }
     setCatalogBusy(true);
-    // Both windows can ask for the catalog at startup; only retry a busy read.
-    async function readCatalog() {
-      for (let attempt = 0; ; attempt++) {
-        if (cancelled) return [];
-        try {
-          return await probeApi.models(id);
-        } catch (e) {
-          if (e !== "管理操作正在进行，请稍后重试" || attempt >= 2) throw e;
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      }
-    }
-    void readCatalog()
+    void probeApi.models(id)
       .then((rows) => {
         if (!cancelled) {
           setModels(rows);
           if (!rows.length)
-            setCatalogError("未找到可直连的原始模型（不支持别名或前缀）");
+            setCatalogError("CLIProxy 未返回可用模型");
         }
       })
       .catch((e) => {
@@ -92,20 +79,18 @@ export function useProbe(credentials: ManagementSnapshot) {
     return () => {
       cancelled = true;
     };
-  }, [credentials.connected, id, refresh]);
-  async function run(mode: string) {
+  }, [credentials.connected, credentials.port, enabledKey, id, refresh]);
+  async function run() {
     if (active.current) return;
     if (
-      mode !== "manual" &&
-      (!native ||
-        !credentials.connected ||
-        credentials.busy ||
-        credentials.stale ||
-        !credential ||
-        !model ||
-        catalogBusy)
+      !native ||
+      !credentials.connected ||
+      credentials.busy ||
+      credentials.stale ||
+      !model ||
+      catalogBusy
     ) {
-      setError("请先连接管理接口并选择可用凭证与模型");
+      setError("请先连接管理接口并选择可用模型");
       return;
     }
     const controller = new AbortController();
@@ -115,33 +100,23 @@ export function useProbe(credentials: ManagementSnapshot) {
     setError("");
     setResult(null);
     setAttempts([]);
-    const source = mode === "manual" ? "manual" : "auto";
-    let outputs: Sample[] = challenges.map((c, i) => ({
-      ...c,
-      slot: i + 1,
-      text: answers[i],
-    }));
-    let all = outputs;
-    let warnings: string[] = [];
     try {
-      if (source === "auto") {
-        const collected = await collectSamples(
-          challenges,
-          (prompt) => probeApi.sample(id, model!.id, prompt),
-          controller.signal,
-          (current, rows) => {
-            if (mounted.current) {
-              setPhase(`采样 ${current} / 3`);
-              setAttempts(rows);
-            }
-          },
-        );
-        outputs = collected.samples;
-        all = collected.attempts;
-        warnings = collected.warnings;
-        if (!outputs.length)
-          throw new Error(warnings.join("；") || "未取得有效回答");
-      }
+      const collected = await collectSamples(
+        challenges,
+        (prompt) => probeApi.sample(id, model!.id, prompt),
+        controller.signal,
+        (current, rows) => {
+          if (mounted.current) {
+            setPhase(`采样 ${current} / 3`);
+            setAttempts(rows);
+          }
+        },
+      );
+      const outputs = collected.samples;
+      const all = collected.attempts;
+      const warnings = collected.warnings;
+      if (!outputs.length)
+        throw new Error(warnings.join("；") || "未取得有效回答");
       controller.signal.throwIfAborted();
       setPhase("本地分析中…");
       const detection = await analyze(outputs, controller.signal);
@@ -151,9 +126,9 @@ export function useProbe(credentials: ManagementSnapshot) {
         warnings: [...warnings, ...detection.warnings],
         id: crypto.randomUUID(),
         at: Date.now(),
-        source,
-        model: source === "auto" ? model!.id : "手动回答",
-        credential: source === "auto" ? credential!.name : "",
+        source: "auto",
+        model: model!.id,
+        credential: "CLIProxy 自动路由",
         attempts: all,
       };
       setAttempts(all);
@@ -181,14 +156,6 @@ export function useProbe(credentials: ManagementSnapshot) {
   }
   return {
     challenges,
-    answers,
-    setAnswers: (values: string[]) => {
-      setAnswers(values);
-      setResult(null);
-      setError("");
-    },
-    slot,
-    setSlot,
     available,
     credential,
     setCredentialId,
@@ -220,7 +187,6 @@ export function useProbe(credentials: ManagementSnapshot) {
     newRound: () => {
       if (!active.current) {
         setChallenges(generateChallenges(3));
-        setAnswers(["", "", ""]);
         setResult(null);
         setAttempts([]);
         setError("");

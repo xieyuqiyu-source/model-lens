@@ -56,7 +56,7 @@ export function analyzeSamples(
     return !issue;
   });
   if (!accepted.length)
-    throw new Error(warnings.join("；") || "请至少粘贴一份模型回答");
+    throw new Error(warnings.join("；") || "未取得有效模型回答");
   return {
     analysis: analyzeSharedOutputs(accepted, bank, artifact, {
       allowPartial: true,
@@ -69,7 +69,7 @@ export type Detection = ReturnType<typeof analyzeSamples>;
 export type ProbeRecord = Detection & {
   id: string;
   at: number;
-  source: "auto" | "manual";
+  source: "auto";
   model: string;
   credential: string;
   attempts: Sample[];

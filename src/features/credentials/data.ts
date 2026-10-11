@@ -9,7 +9,6 @@ export type Credential = {
   fileName: string;
   deleteToken: string;
   supported: boolean;
-  probeSupported: boolean;
   five: number | null;
   week: number | null;
   resetFive: string;

@@ -143,7 +143,7 @@ with sync_playwright() as p:
             if tray:
                 check_dialog(page, page.get_by_role('button', name='CLIProxy 状态未知', exact=True), '本机 CLIProxy')
             if not tray:
-                check_select(page, page.get_by_role('button', name=re.compile('选择探查凭证：')))
+                check_select(page, page.get_by_role('button', name=re.compile('选择模型范围：')))
                 for name, title in [('CLIProxy 状态未知', '本机 CLIProxy'), ('历史', '检测历史'), ('管理连接', '连接 CLIProxy'), ('菜单栏快捷入口', '菜单栏面板预览')]:
                     check_dialog(page, page.get_by_role('button', name=name, exact=True), title)
                 page.get_by_role('button', name='凭证优先', exact=True).click()
@@ -159,18 +159,7 @@ with sync_playwright() as p:
                     control.click()
                     expect(control).to_have_css('background-color', before)
                     assert not has_shadow(control)
-                page.get_by_role('button', name='手动检测', exact=True).click()
-                answer = page.get_by_role('textbox', name='模型回答 1')
-                expect(answer).to_have_attribute('rows', '2')
-                metrics = answer.evaluate("e => {const s=getComputedStyle(e);return {height:e.clientHeight,lines:parseFloat(s.lineHeight),padding:parseFloat(s.paddingTop)+parseFloat(s.paddingBottom)};}")
-                assert abs(metrics['height'] - metrics['padding'] - metrics['lines'] * 2) < 2, metrics
-                answer.fill('合成回答\n' * 30)
-                assert has_shadow(answer)
-                assert answer.evaluate('e => e.scrollHeight > e.clientHeight')
-                answer.press('Control+End')
-                answer.fill('')
-                page.mouse.click(10, 100)
-                assert not has_shadow(answer)
+                expect(page.get_by_role('button', name='手动检测', exact=True)).to_have_count(0)
                 for palette in ['翡翠绿', '海湾蓝', '鸢尾紫']:
                     for mode in ['浅色', '深色']:
                         trigger.click()
@@ -178,11 +167,11 @@ with sync_playwright() as p:
                         page.get_by_role('button', name=mode, exact=True).click()
                         close.click()
                         expect(dialog).to_have_count(0)
-                        answer.click()
-                        assert has_shadow(answer)
-                        expect(answer).to_have_css('transition-property', re.compile('box-shadow'))
+                        model = page.get_by_role('button', name=re.compile('选择模型：'))
+                        focus_with_tab(page, model)
+                        assert has_shadow(model)
                         page.mouse.click(10, 100)
-                        assert not has_shadow(answer)
+                        assert not has_shadow(model)
                 page.screenshot(path=f'/tmp/modellens-0.2.9-{engine.name}-dark.png')
             assert not errors, errors
             print(f'{engine.name} / {"菜单栏" if tray else "主窗口"}: 焦点回归通过')

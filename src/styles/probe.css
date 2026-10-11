@@ -1,19 +1,10 @@
-.probe-controls {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
-}
 fieldset.probe-form {
   border: 0;
   padding: 0;
   min-width: 0;
 }
 .probe > .probe-status {
-  margin: -12px 0 20px;
-}
-.compact .credential-choice {
-  display: flex;
+  margin: 12px 0 20px;
 }
 .probe-status {
   display: flex;
@@ -61,4 +52,10 @@ fieldset.probe-form {
 }
 .probe-history small {
   color: var(--muted);
+}
+
+.compact > .probe-status {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
 }

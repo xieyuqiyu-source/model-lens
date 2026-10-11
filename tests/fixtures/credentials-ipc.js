@@ -7,7 +7,7 @@ let callbackId = 0;
 const row = (id, enabled = false) => ({
   id: `${id}.json:idx`, fileName: `${id}.json`, name: `${id}@example.invalid`, brand: 'openai',
   provider: 'codex', enabled, editable: true, deletable: true, deleteToken: `token-${id}`,
-  supported: true, probeSupported: true, five: null, week: null, resetFive: '', resetWeek: '', quotaAt: null, quotaError: null,
+  supported: true, five: null, week: null, resetFive: '', resetWeek: '', quotaAt: null, quotaError: null,
 });
 window.__testSnapshot = {
   connected: true, saved: true, port: 8317, busy: false, stale: false, error: null, revision: 1,
@@ -33,6 +33,7 @@ window.__TAURI_INTERNALS__ = {
     }
     if (cmd === 'discover_services') return {services:[],checkedAt:0,statusKnown:true,warning:null};
     if (cmd === 'set_appearance') return;
+    if (cmd === 'probe_models') return [];
     if (!['management_snapshot','credential_import','credential_delete','quota_refresh','credentials_list'].includes(cmd))
       throw new Error(`Unexpected mock command: ${cmd}`);
     const s = window.__testSnapshot;

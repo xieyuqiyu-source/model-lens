@@ -51,7 +51,7 @@ export function ProbeResult({
       ))}
       <footer>
         <span className="meta">
-          {record.source === "manual" ? "手动分析" : record.credential}
+          {record.credential}
         </span>
         <button
           className="text-button"
