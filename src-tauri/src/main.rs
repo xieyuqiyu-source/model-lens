@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    window::{Effect, EffectState, EffectsBuilder},
     Emitter, Manager,
 };
 
@@ -33,6 +34,12 @@ fn open_main(app: tauri::AppHandle) {
     show_main(&app);
     if let Some(w) = app.get_webview_window("tray") {
         let _ = w.hide();
+    }
+}
+#[tauri::command]
+fn close_tray(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("tray") {
+        let _ = window.hide();
     }
 }
 #[tauri::command]
@@ -82,7 +89,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             discover_services,
             open_main,
-            open_tray
+            open_tray,
+            close_tray
         ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 ModelLens", true, None::<&str>)?;
@@ -97,6 +105,15 @@ fn main() {
             .inner_size(400.0, 270.0)
             .resizable(false)
             .decorations(false)
+            .transparent(true)
+            .shadow(true)
+            .effects(
+                EffectsBuilder::new()
+                    .effect(Effect::Menu)
+                    .state(EffectState::Active)
+                    .radius(13.0)
+                    .build(),
+            )
             .visible(false)
             .always_on_top(true)
             .skip_taskbar(true)

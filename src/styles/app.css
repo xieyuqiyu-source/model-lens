@@ -832,17 +832,45 @@ textarea::placeholder {
 .toast .icon-button {
   color: inherit;
 }
+html[data-surface="tray"],
+html[data-surface="tray"] body,
+html[data-surface="tray"] #root {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
 .tray-app {
+  height: 100%;
   padding: 16px;
-  background: #f0f3f0;
-  min-height: 100dvh;
+  border-radius: 13px;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: inset 0 0 0 0.5px #ffffff70;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-surface="tray"] {
+    color-scheme: dark;
+    color: #e4ebe6;
+    --muted: #b6c4bc;
+    --line: #ffffff26;
+    --surface: #303a35;
+    --ink: #e4ebe6;
+  }
+  .tray-app { box-shadow: inset 0 0 0 0.5px #ffffff30; }
+  .tray-app .brand { filter: invert(1); }
+  .tray-app .account-bar { background: #dce6dfcc; color: #172d21; }
+  .tray-app .tray-header select { background: #ffffff12; }
+  .tray-app .modal { background: #26332c; }
+  .tray-app .button { background: #ffffff12; color: #e4ebe6; }
+  .tray-app .button:hover:not(:disabled) { background: #ffffff24; border-color: #ffffff38; }
+  .tray-app .switch[aria-checked="true"] { background: #6e927a; }
 }
 .tray-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .tray-header select {
   width: 138px;
@@ -859,7 +887,7 @@ textarea::placeholder {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-top: 16px;
+  margin-top: 12px;
   padding-top: 10px;
   font-size: 10px;
   color: var(--muted);

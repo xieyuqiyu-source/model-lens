@@ -31,3 +31,7 @@ export async function openMain() {
 export async function openTray() {
   if (native) await invoke("open_tray");
 }
+
+export async function closeTray() {
+  if (native) await invoke("close_tray");
+}

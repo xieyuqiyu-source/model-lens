@@ -17,7 +17,7 @@ import {
 import { initialCredentials } from "./features/credentials/data";
 import { ImportDialog } from "./features/credentials/ImportDialog";
 import { Probe, ModelSelect } from "./features/probe/Probe";
-import { openMain, openTray, native } from "./features/service/api";
+import { openMain, openTray, closeTray, native } from "./features/service/api";
 function readPreference(key: string, fallback: string) {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -49,6 +49,14 @@ export default function App() {
   const [toast, setToast] = useState("");
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
+  useEffect(() => {
+    if (!isTray) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !modal) void closeTray();
+    };
+    window.addEventListener("keydown", dismiss);
+    return () => window.removeEventListener("keydown", dismiss);
+  }, [isTray, modal]);
   const preview = () =>
     setToast("当前是界面预览，此操作未请求模型或修改真实凭证。");
   const toggle = (id: string) =>
