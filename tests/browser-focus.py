@@ -27,7 +27,7 @@ def check_select(page, trigger):
     expect(menu).to_be_visible()
     expect(trigger).to_have_css('border-color', baseline)
     expect(menu).to_have_css('outline-style', 'none')
-    menu.get_by_role('option').nth(1).click()
+    menu.get_by_role('option').nth(min(1, menu.get_by_role('option').count() - 1)).click()
     expect(menu).not_to_be_visible()
     assert not has_shadow(trigger)
     trigger.click()
@@ -139,11 +139,11 @@ with sync_playwright() as p:
                 assert has_shadow(password)
                 close.click()
                 expect(dialog).to_have_count(0)
-            check_select(page, page.get_by_role('button', name=re.compile('选择模型（预览）')))
+            check_select(page, page.get_by_role('button', name=re.compile('选择模型：')))
             if tray:
                 check_dialog(page, page.get_by_role('button', name='CLIProxy 状态未知', exact=True), '本机 CLIProxy')
             if not tray:
-                check_select(page, page.get_by_role('button', name=re.compile('选择示例凭证')))
+                check_select(page, page.get_by_role('button', name=re.compile('选择探查凭证：')))
                 for name, title in [('CLIProxy 状态未知', '本机 CLIProxy'), ('历史', '检测历史'), ('管理连接', '连接 CLIProxy'), ('菜单栏快捷入口', '菜单栏面板预览')]:
                     check_dialog(page, page.get_by_role('button', name=name, exact=True), title)
                 page.get_by_role('button', name='凭证优先', exact=True).click()
@@ -159,7 +159,7 @@ with sync_playwright() as p:
                     expect(control).to_have_css('background-color', before)
                     assert not has_shadow(control)
                 page.get_by_role('button', name='手动检测', exact=True).click()
-                answer = page.get_by_role('textbox', name='外部模型回答')
+                answer = page.get_by_role('textbox', name='模型回答 1')
                 expect(answer).to_have_attribute('rows', '2')
                 metrics = answer.evaluate("e => {const s=getComputedStyle(e);return {height:e.clientHeight,lines:parseFloat(s.lineHeight),padding:parseFloat(s.paddingTop)+parseFloat(s.paddingBottom)};}")
                 assert abs(metrics['height'] - metrics['padding'] - metrics['lines'] * 2) < 2, metrics

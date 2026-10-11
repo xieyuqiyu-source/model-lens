@@ -33,6 +33,15 @@ impl Api {
         })
     }
     pub fn call(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Value, String> {
+        self.call_with_timeout(method, path, body, Duration::from_secs(25))
+    }
+    pub fn call_with_timeout(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        timeout: Duration,
+    ) -> Result<Value, String> {
         let base = if self.legacy {
             "/v0/management"
         } else {
@@ -54,7 +63,8 @@ impl Api {
                 method,
                 format!("http://127.0.0.1:{}{}{}", self.port, base, path),
             )
-            .bearer_auth(&self.key);
+            .bearer_auth(&self.key)
+            .timeout(timeout);
         if let Some(body) = body {
             request = request.json(body);
         }

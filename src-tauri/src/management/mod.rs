@@ -1,3 +1,4 @@
+pub mod probe;
 mod local_connection;
 mod quota;
 mod transport;
@@ -22,6 +23,7 @@ pub struct Credential {
     pub enabled: bool,
     pub editable: bool,
     pub supported: bool,
+    pub probe_supported: bool,
     pub five: Option<f64>,
     pub week: Option<f64>,
     pub reset_five: String,
@@ -115,6 +117,7 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
             editable: item["disabled"].is_boolean()
                 && !item["runtime_only"].as_bool().unwrap_or(false),
             supported,
+            probe_supported: supported && text(item, "account_type") == "oauth",
             ..Credential::default()
         };
         let account_id = text(&item["id_token"], "chatgpt_account_id");

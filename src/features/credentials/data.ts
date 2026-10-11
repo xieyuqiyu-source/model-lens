@@ -6,6 +6,7 @@ export type Credential = {
   enabled: boolean;
   editable: boolean;
   supported: boolean;
+  probeSupported: boolean;
   five: number | null;
   week: number | null;
   resetFive: string;

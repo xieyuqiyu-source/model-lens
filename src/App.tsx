@@ -18,6 +18,8 @@ import { useCredentials } from "./features/credentials/useCredentials";
 import { Connection } from "./features/credentials/Connection";
 import { ImportDialog } from "./features/credentials/ImportDialog";
 import { Probe, ModelSelect } from "./features/probe/Probe";
+import { useProbe } from "./features/probe/useProbe";
+import { ProbeHistory } from "./features/probe/ProbeHistory";
 import { openMain, openTray, closeTray, native } from "./features/service/api";
 function readPreference(key: string, fallback: string) {
   try {
@@ -57,8 +59,8 @@ export default function App() {
   const changeFocus = (value: string) =>
     workspaceMotion.run(() => flushSync(() => setFocus(value)));
   const [mode, setMode] = usePreference("mode", "auto");
-  const [model, setModel] = usePreference("model", "Sonnet 4.5");
   const credentials = useCredentials();
+  const probe = useProbe(credentials);
   const [modal, setModal] = useState("");
   const [toast, setToast] = useState("");
   const isTray =
@@ -76,7 +78,7 @@ export default function App() {
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
   }, [isTray, modal]);
-  const preview = () => setToast("模型检测尚未接入，本次没有发起模型请求。");
+  const preview = () => { changeFocus("probe"); setToast("请在模型探查选择凭证后开始检测"); };
   const status = (
     <button
       className="service-status"
@@ -108,7 +110,7 @@ export default function App() {
         <>
           <header className="tray-header">
             {status}
-            <ModelSelect value={model} onChange={setModel} />
+            <ModelSelect state={probe} />
           </header>
           {rows}
           <div className="tray-bottom">
@@ -180,11 +182,14 @@ export default function App() {
             <Probe
               compact={focus === "credentials"}
               onExpand={() => changeFocus("probe")}
-              preview={preview}
+              state={probe}
+              notify={setToast}
+              onConnect={connect}
+              connected={credentials.connected}
+              managementBusy={credentials.busy}
+              stale={credentials.stale}
               mode={mode}
               setMode={setMode}
-              model={model}
-              setModel={setModel}
             />
             <Credentials
               state={credentials}
@@ -218,11 +223,7 @@ export default function App() {
       {modal === "import" && <ImportDialog onClose={() => setModal("")} />}
       {modal === "history" && (
         <Modal title="检测历史" onClose={() => setModal("")}>
-          <div className="empty">
-            <History size={28} />
-            <p>还没有检测记录</p>
-            <span>真实检测尚未接入。</span>
-          </div>
+          <ProbeHistory state={probe} onChoose={() => { setModal(""); changeFocus("probe"); }} />
         </Modal>
       )}
       {modal === "tray" && (
@@ -230,7 +231,7 @@ export default function App() {
           <div className="tray-preview">
             <header className="tray-header">
               {status}
-              <ModelSelect value={model} onChange={setModel} />
+              <ModelSelect state={probe} />
             </header>
             {rows}
             <div className="tray-bottom">

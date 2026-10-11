@@ -116,7 +116,9 @@ fn main() {
             management::management_forget,
             management::credentials_list,
             management::credential_toggle,
-            management::quota_refresh
+            management::quota_refresh,
+            management::probe::probe_models,
+            management::probe::probe_sample
         ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 ModelLens", true, None::<&str>)?;
