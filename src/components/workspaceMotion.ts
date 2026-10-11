@@ -1,4 +1,4 @@
-// Animate panel snapshots so text and credential cards only lay out once.
+// Cross-fade one fixed-size snapshot; the live layout changes only once.
 export function createWorkspaceMotion(host = document) {
   let active: ViewTransition | undefined;
   let revision = 0;

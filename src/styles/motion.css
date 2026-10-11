@@ -1,7 +1,7 @@
 :root {
   --motion-fast: 120ms;
   --motion-control: 180ms;
-  --motion-layout: 300ms;
+  --motion-layout: 220ms;
   --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 button,
@@ -39,34 +39,38 @@ button:not(:disabled):active {
 .account-fill {
   transition: width 420ms var(--motion-ease);
 }
-/* Capture only the two panels; keep the titlebar live during rapid switching. */
+/* One fixed-size workspace snapshot: fade only, with no panel movement. */
 :root {
   view-transition-name: none;
 }
-.workspace-transitioning .workspace > .probe {
-  view-transition-name: probe-panel;
-}
-.workspace-transitioning .workspace > .credentials {
-  view-transition-name: credentials-panel;
+.workspace-transitioning .workspace {
+  view-transition-name: workspace-content;
 }
 ::view-transition {
   pointer-events: none;
 }
-::view-transition-group(probe-panel),
-::view-transition-group(credentials-panel) {
-  animation-duration: var(--motion-layout);
-  animation-timing-function: var(--motion-ease);
+::view-transition-group(workspace-content) {
+  animation: none;
 }
-::view-transition-old(probe-panel),
-::view-transition-new(probe-panel),
-::view-transition-old(credentials-panel),
-::view-transition-new(credentials-panel) {
+::view-transition-old(workspace-content),
+::view-transition-new(workspace-content) {
   width: 100%;
   height: 100%;
-  object-fit: none;
-  object-position: left top;
   mix-blend-mode: normal;
-  animation-duration: var(--motion-layout);
+}
+::view-transition-old(workspace-content) {
+  animation: workspace-fade-out var(--motion-layout) ease-in-out both;
+}
+::view-transition-new(workspace-content) {
+  animation: workspace-fade-in var(--motion-layout) ease-in-out both;
+}
+@keyframes workspace-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes workspace-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .workspace-transitioning .workspace .result,
 .workspace-transitioning .workspace .manual-input,
