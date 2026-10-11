@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { createWorkspaceMotion } from "./components/workspaceMotion";
-import { History, Settings, RefreshCw, ArrowUpRight, Scan } from "lucide-react";
+import { History, Settings, RefreshCw, ArrowUpRight, Scan, Palette } from "lucide-react";
 import { Segment } from "./components/Segment";
 import { Toast } from "./components/Toast";
 import { Logo, Modal } from "./components/Common";
+import { useAppearance } from "./features/appearance/useAppearance";
+import { Appearance } from "./features/appearance/Appearance";
 import { useServices } from "./features/service/useServices";
 import { ServicePanel } from "./features/service/ServicePanel";
 import {
@@ -40,6 +42,7 @@ function usePreference(key: string, fallback: string) {
 }
 export default function App() {
   const services = useServices();
+  const appearance = useAppearance();
   const [focus, setFocus] = usePreference("focus", "probe");
   const [workspaceMotion] = useState(createWorkspaceMotion);
   useEffect(() => () => workspaceMotion.cancel(), [workspaceMotion]);
@@ -109,6 +112,7 @@ export default function App() {
             >
               {credentials.busy ? "刷新中…" : "刷新额度"}
             </button>
+            <button className="icon-button" aria-label="外观设置" title="外观设置" onClick={() => setModal("appearance")}><Palette size={14} /></button>
             <button
               className="icon-button"
               aria-label="打开主窗口"
@@ -151,8 +155,8 @@ export default function App() {
               </button>
               <button
                 className="icon-button"
-                aria-label="管理连接设置"
-                onClick={() => setModal("connection")}
+                aria-label="外观与连接设置"
+                onClick={() => setModal("appearance")}
               >
                 <Settings />
               </button>
@@ -188,6 +192,7 @@ export default function App() {
           </main>
         </>
       )}
+      {modal === "appearance" && <Appearance {...appearance} compact={isTray} onClose={() => setModal("")} onConnect={() => setModal("connection")} />}
       {modal === "connection" && (
         <Connection
           state={credentials}

@@ -56,7 +56,7 @@ export function Probe(p: Props) {
   return (
     <section
       className={`probe ${p.compact ? "compact" : ""}`}
-      aria-label="模型探查"
+      aria-label="模型探查" tabIndex={0}
     >
       <header className="section-heading">
         <div>
@@ -217,7 +217,7 @@ export function Probe(p: Props) {
       )}
       <footer className="probe-foot">
         上次使用：{p.mode === "auto" ? "自动检测" : "手动检测"}
-        <span>本机预览版 0.2.5</span>
+        <span>本机预览版 0.2.6</span>
       </footer>
     </section>
   );

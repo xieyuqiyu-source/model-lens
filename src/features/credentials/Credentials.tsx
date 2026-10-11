@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import {
   ArrowUpRight,
   PanelTop,
@@ -62,7 +63,7 @@ export function CredentialRows({
   onConnect: () => void;
 }) {
   return (
-    <div className="credential-rows">
+    <div className="credential-rows" tabIndex={0} role="region" aria-label="凭证列表，可滚动">
       {!state.credentials.length && (
         <div className="credentials-empty">
           <p>{state.connected ? "没有可显示的凭证" : "尚未连接管理接口"}</p>
@@ -82,13 +83,12 @@ export function CredentialRows({
             className={`account-bar ${c.five === null ? "weekly" : ""}`}
             data-quota={c.five === null && c.week === null ? "missing" : "known"}
             data-error={Boolean(c.quotaError)}
+            style={{ "--quota-width": `${c.five ?? c.week ?? 0}%` } as CSSProperties}
             title={`${c.name} · ${c.provider} · ${c.quotaError || (c.five !== null ? `5h 剩余 ${c.five}%` : c.week !== null ? `1w 剩余 ${c.week}%` : !c.enabled ? "已停用，额度未刷新" : !c.supported ? "此厂商额度暂未适配" : "额度尚未查询")}`}
           >
-            <span
-              className="account-fill"
-              style={{ width: `${c.five ?? c.week ?? 0}%` }}
-            />
-            <span>{c.name}</span>
+            <span className="account-fill" />
+            <span className="account-label">{c.name}</span>
+            <span className="account-label account-label-on-fill" aria-hidden="true">{c.name}</span>
           </div>
           <span className="period">
             {c.five !== null ? "5h" : c.week !== null ? "1w" : ""}
@@ -124,6 +124,7 @@ export function Credentials(p: Props) {
     <section
       className={`credentials ${p.expanded ? "expanded" : ""}`}
       aria-label="凭证与额度"
+      tabIndex={0}
     >
       <header className="section-heading">
         <div>

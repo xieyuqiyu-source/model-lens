@@ -33,7 +33,7 @@ button:not(:disabled):active {
     background-color var(--motion-control);
 }
 .credential-card:hover {
-  border-color: #c9d7cd;
+  border-color: var(--border);
 }
 .track > span,
 .account-fill {
@@ -110,8 +110,8 @@ button:not(:disabled):active {
   left: 3px;
   width: calc((100% - 6px) / var(--segment-count));
   border-radius: 6px;
-  background: #fdfefd;
-  box-shadow: 0 1px 3px #20392a10;
+  background: var(--paper);
+  box-shadow: 0 1px 3px var(--shadow);
   transform: translateX(calc(var(--segment-index) * 100%));
   transition: transform 240ms var(--motion-ease);
 }
@@ -148,8 +148,8 @@ button:not(:disabled):active {
   transition: rotate var(--motion-control) var(--motion-ease);
 }
 .select-trigger[aria-expanded="true"] {
-  border-color: #a6bbae;
-  background: #e9f0eb;
+  border-color: var(--border);
+  background: var(--hover);
 }
 .select-trigger[aria-expanded="true"] > svg:last-child {
   rotate: 180deg;
@@ -163,13 +163,13 @@ button:not(:disabled):active {
   inset: auto;
   margin: 0;
   padding: 6px;
-  border: 1px solid #dbe5dd;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fbfdfbfa;
-  color: #283a30;
+  background: var(--paper);
+  color: var(--text);
   box-shadow:
-    0 12px 32px #233a2a24,
-    0 2px 6px #233a2a0b;
+    0 12px 32px var(--shadow),
+    0 2px 6px var(--shadow);
   overflow: auto;
   overscroll-behavior: contain;
   outline: none;
@@ -217,16 +217,16 @@ button:not(:disabled):active {
 }
 .select-option small {
   font-size: 10px;
-  color: #637669;
+  color: var(--muted);
 }
 .select-option[data-active="true"] {
-  background: #e9f0eb;
+  background: var(--hover);
 }
 .select-option[aria-selected="true"] .option-check {
-  color: #547860;
+  color: var(--accent);
 }
 .select-option[data-active="true"] strong {
-  color: #1d3828;
+  color: var(--text);
 }
 .tray-header .select-control {
   width: 148px;
@@ -253,7 +253,7 @@ button:not(:disabled):active {
   border-radius: 8px;
 }
 .disclosure-trigger:hover {
-  background: #f3f6f3;
+  background: var(--hover);
 }
 .disclosure-trigger > span:last-child {
   display: flex;
@@ -291,12 +291,12 @@ button:not(:disabled):active {
 .modal {
   width: 520px;
   padding: 0;
-  border: 1px solid #dde6df;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: #fdfefd;
+  background: var(--paper);
   box-shadow:
-    0 24px 70px #192d2633,
-    0 4px 12px #192d2612;
+    0 24px 70px var(--shadow),
+    0 4px 12px var(--shadow);
 }
 .modal[open] {
   animation: modal-arrive 200ms var(--motion-ease);
@@ -314,7 +314,7 @@ button:not(:disabled):active {
   }
 }
 .modal::backdrop {
-  background: #1b302b42;
+  background: var(--veil);
   backdrop-filter: blur(5px);
   animation: veil-arrive 180ms ease-out;
   transition: opacity 140ms;
@@ -344,11 +344,11 @@ button:not(:disabled):active {
   width: 26px;
   height: 26px;
   min-width: 26px;
-  background: #eef3ee;
+  background: var(--surface);
   border-radius: 50%;
 }
 .modal-header .icon-button:hover {
-  background: #e3ebe4;
+  background: var(--hover);
 }
 .modal-body {
   padding: 22px;
@@ -360,7 +360,7 @@ button:not(:disabled):active {
 .modal-actions {
   margin: 22px -22px -22px;
   padding: 16px 22px;
-  background: #f5f8f5;
+  background: var(--surface);
   border-top: 1px solid var(--line);
   gap: 12px;
 }
@@ -373,15 +373,15 @@ button:not(:disabled):active {
 }
 .connection-form input {
   height: 38px;
-  background: #f4f7f4;
-  border-color: #e0e8e1;
+  background: var(--surface);
+  border-color: var(--border);
 }
 .connection-form input:focus {
-  background: #fff;
+  background: var(--paper);
 }
 .connection-form label {
   font-size: 11px;
-  color: #425a49;
+  color: var(--text);
 }
 .tray-app .modal {
   padding: 0;
@@ -401,7 +401,7 @@ button:not(:disabled):active {
 .toast {
   animation: toast-arrive 180ms var(--motion-ease);
   border-radius: 11px;
-  box-shadow: 0 8px 28px #20352a30;
+  box-shadow: 0 8px 28px var(--shadow);
 }
 @keyframes toast-arrive {
   from {
@@ -411,37 +411,5 @@ button:not(:disabled):active {
   to {
     opacity: 1;
     translate: 0 0;
-  }
-}
-@media (prefers-color-scheme: dark) {
-  html[data-surface="tray"] .select-trigger {
-    background: #ffffff12;
-  }
-  html[data-surface="tray"] .select-trigger[aria-expanded="true"] {
-    background: #ffffff20;
-    border-color: #9eb3a5;
-  }
-  html[data-surface="tray"] .select-menu {
-    color: #e8efe9;
-    background: #2b3832fa;
-    border-color: #ffffff25;
-  }
-  html[data-surface="tray"] .select-option[data-active="true"] {
-    background: #ffffff16;
-  }
-  html[data-surface="tray"] .select-option strong {
-    color: #e8efe9;
-  }
-  html[data-surface="tray"] .select-option small {
-    color: #b8c9be;
-  }
-  html[data-surface="tray"] .option-check {
-    color: #a9d5b8;
-  }
-  .tray-app .modal {
-    border-color: #ffffff25;
-  }
-  .tray-app .modal-header .icon-button {
-    background: #ffffff12;
   }
 }

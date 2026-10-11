@@ -8,6 +8,21 @@ use tauri::{
     Emitter, Manager,
 };
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum AppearanceMode {
+    Light,
+    Dark,
+    System,
+}
+#[tauri::command]
+fn set_appearance(app: tauri::AppHandle, mode: AppearanceMode) {
+    app.set_theme(match mode {
+        AppearanceMode::Light => Some(tauri::Theme::Light),
+        AppearanceMode::Dark => Some(tauri::Theme::Dark),
+        AppearanceMode::System => None,
+    });
+}
 struct DiscoveryLock(Mutex<()>);
 #[tauri::command]
 async fn discover_services(app: tauri::AppHandle) -> Result<discovery::Snapshot, String> {
@@ -90,6 +105,7 @@ fn main() {
         .manage(management::Management::default())
         .invoke_handler(tauri::generate_handler![
             discover_services,
+            set_appearance,
             open_main,
             open_tray,
             close_tray,
