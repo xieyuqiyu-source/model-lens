@@ -122,13 +122,13 @@
 | 海湾蓝 | `#1973AB` / `#194784` | `#64BBEE` / `#6399EA` | 冷静、明快 |
 | 鸢尾紫 | `#8060BE` / `#503384` | `#B6A1ED` / `#9E85D3` | 柔和、鲜明 |
 
-语义色（成功、警告、错误）独立于主题色；通过文字、图标和周期标签共同传达状态。所有颜色来自 `src/features/appearance/tokens.json`，Figma 使用同名变量和一致数值。正文与背景、按钮文字、额度内账号文字等关键组合按 WCAG AA 4.5:1 校验；必要控件与额度条按 3:1 校验；主题色令牌也校验对比。该检查不等于完整无障碍认证。
+语义色（成功、警告、错误）独立于主题色；通过文字、图标和周期标签共同传达状态。所有颜色来自 `src/features/appearance/tokens.json`。Figma 设计阶段已结束，后续以应用实现为准，不再参考或同步设计稿。正文与背景、按钮文字、额度内账号文字等关键组合按 WCAG AA 4.5:1 校验；必要控件与额度条按 3:1 校验；主题色令牌也校验对比。该检查不等于完整无障碍认证。
 
 **主窗口、菜单栏、下拉框和弹窗均隐藏滚动条**，保留滚轮、触控板和键盘滚动；凭证列表和主面板可通过 Tab 聚焦，再用方向键 / Page Down / End 浏览。隐藏滚动条不会截断后续账号。
 
 主题偏好仅保存模式与配色，不包含账号或密钥。管理密钥由独立的本地文件保存，更新应用后自动恢复连接。
 
-[Figma 已应用主题规范](https://www.figma.com/design/SORAmBaRKtmNnNMpmISYUg/ModelLens?node-id=69-3659) · [验证记录](docs/verification-0.2.6.md)
+[Figma 历史设计存档（不再维护）](https://www.figma.com/design/SORAmBaRKtmNnNMpmISYUg/ModelLens?node-id=69-3659) · [验证记录](docs/verification-0.2.6.md)
 
 ## 下拉菜单、弹窗和动效
 
