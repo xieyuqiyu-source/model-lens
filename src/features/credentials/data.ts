@@ -1,52 +1,31 @@
 export type Credential = {
   id: string;
+  name: string;
   brand: string;
+  provider: string;
   enabled: boolean;
+  editable: boolean;
+  supported: boolean;
   five: number | null;
   week: number | null;
   resetFive: string;
   resetWeek: string;
-  expires: string;
+  quotaAt: number | null;
+  quotaError: string | null;
 };
-export const initialCredentials: Credential[] = [
-  {
-    id: "personal",
-    brand: "openai",
-    enabled: true,
-    five: 82,
-    week: 46,
-    resetFive: "2 小时 14 分钟后重置",
-    resetWeek: "3 天 6 小时后重置",
-    expires: "10 月 28 日 14:30",
-  },
-  {
-    id: "work",
-    brand: "claude",
-    enabled: true,
-    five: 54,
-    week: 72,
-    resetFive: "1 小时 32 分钟后重置",
-    resetWeek: "5 天 2 小时后重置",
-    expires: "未提供",
-  },
-  {
-    id: "backup",
-    brand: "gemini",
-    enabled: true,
-    five: null,
-    week: 67,
-    resetFive: "此窗口未提供",
-    resetWeek: "2 天 9 小时后重置",
-    expires: "11 月 02 日 09:00",
-  },
-  {
-    id: "testing",
-    brand: "deepseek",
-    enabled: false,
-    five: 28,
-    week: null,
-    resetFive: "4 小时 08 分钟后重置",
-    resetWeek: "此窗口未提供",
-    expires: "未提供",
-  },
-];
+export type ManagementSnapshot = {
+  connected: boolean;
+  port: number;
+  busy: boolean;
+  stale: boolean;
+  credentials: Credential[];
+  error: string | null;
+  revision: number;
+};
+export function resetLabel(value: string): string {
+  if (!value) return "重置时间未提供";
+  const date = new Date(/^\d+$/.test(value) ? Number(value) * 1000 : value);
+  return Number.isNaN(date.getTime())
+    ? "重置时间未提供"
+    : `${date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 重置`;
+}

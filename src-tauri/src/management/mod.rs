@@ -1,0 +1,336 @@
+mod quota;
+mod transport;
+use reqwest::Method;
+use serde::Serialize;
+use serde_json::{json, Value};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tauri::{Emitter, Manager};
+use transport::Api;
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Credential {
+    pub id: String,
+    pub name: String,
+    pub brand: String,
+    pub provider: String,
+    pub enabled: bool,
+    pub editable: bool,
+    pub supported: bool,
+    pub five: Option<f64>,
+    pub week: Option<f64>,
+    pub reset_five: String,
+    pub reset_week: String,
+    pub quota_at: Option<u64>,
+    pub quota_error: Option<String>,
+}
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub connected: bool,
+    pub port: u16,
+    pub busy: bool,
+    pub stale: bool,
+    pub credentials: Vec<Credential>,
+    pub error: Option<String>,
+    pub revision: u64,
+}
+#[derive(Clone)]
+struct Record {
+    row: Credential,
+    name: String,
+    auth_index: String,
+    provider: String,
+    account_id: String,
+}
+#[derive(Default)]
+struct Session {
+    api: Option<Api>,
+    records: HashMap<String, Record>,
+    snapshot: Snapshot,
+}
+#[derive(Default)]
+pub struct Management(Mutex<Session>);
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+fn text(v: &Value, key: &str) -> String {
+    v[key]
+        .as_str()
+        .unwrap_or_default()
+        .chars()
+        .take(512)
+        .collect()
+}
+fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
+    let files = payload["files"].as_array().ok_or("凭证列表格式异常")?;
+    let mut records = HashMap::new();
+    for item in files {
+        let name = text(item, "name");
+        if name.is_empty() {
+            continue;
+        }
+        let auth_index = text(item, "auth_index");
+        let id = format!("{}:{}", name, auth_index);
+        let provider = {
+            let p = text(item, "provider");
+            if p.is_empty() {
+                text(item, "type")
+            } else {
+                p
+            }
+        }
+        .to_lowercase();
+        let brand = match provider.as_str() {
+            "codex" | "openai" | "openai-compatibility" => "openai",
+            "claude" => "claude",
+            "gemini" | "antigravity" => "gemini",
+            "deepseek" => "deepseek",
+            _ => "unknown",
+        }
+        .to_owned();
+        let email = text(item, "email");
+        let supported = matches!(provider.as_str(), "codex" | "claude") && !auth_index.is_empty();
+        // Never expose `account`, raw tokens, paths or arbitrary server fields to the webview.
+        let row = Credential {
+            id: id.clone(),
+            name: if email.is_empty() {
+                name.clone()
+            } else {
+                email
+            },
+            brand,
+            provider: provider.clone(),
+            enabled: item["disabled"].as_bool() == Some(false),
+            editable: item["disabled"].is_boolean()
+                && !item["runtime_only"].as_bool().unwrap_or(false),
+            supported,
+            ..Credential::default()
+        };
+        let account_id = text(&item["id_token"], "chatgpt_account_id");
+        if records
+            .insert(
+                id,
+                Record {
+                    row,
+                    name,
+                    auth_index,
+                    provider,
+                    account_id,
+                },
+            )
+            .is_some()
+        {
+            return Err("凭证身份重复，已停止更新列表".into());
+        }
+    }
+    Ok(records)
+}
+impl Session {
+    fn publish(&mut self, app: &tauri::AppHandle) {
+        self.snapshot.credentials = self.records.values().map(|r| r.row.clone()).collect();
+        self.snapshot
+            .credentials
+            .sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+        self.snapshot.revision += 1;
+        let _ = app.emit("credentials-changed", &self.snapshot);
+    }
+    fn reload(&mut self) -> Result<(), String> {
+        let result = self
+            .api
+            .as_mut()
+            .ok_or("请先连接本机管理接口")?
+            .list()
+            .and_then(|v| normalize(&v));
+        let mut records = match result {
+            Ok(r) => r,
+            Err(e) => {
+                self.snapshot.stale = true;
+                return Err(e);
+            }
+        };
+        for (id, record) in &mut records {
+            if let Some(old) = self.records.get(id) {
+                record.row.five = old.row.five;
+                record.row.week = old.row.week;
+                record.row.reset_five = old.row.reset_five.clone();
+                record.row.reset_week = old.row.reset_week.clone();
+                record.row.quota_at = old.row.quota_at;
+                record.row.quota_error = old.row.quota_error.clone();
+            }
+        }
+        self.records = records;
+        self.snapshot.stale = false;
+        Ok(())
+    }
+    fn quota(&mut self, id: &str) -> Result<(), String> {
+        let record = self
+            .records
+            .get(id)
+            .ok_or("凭证已不存在，请刷新列表")?
+            .clone();
+        if !record.row.enabled {
+            return Err("凭证已停用，未查询额度".into());
+        }
+        match quota::fetch(self.api.as_ref().ok_or("请先连接管理接口")?, &record) {
+            Ok(row) => {
+                self.records.get_mut(id).unwrap().row = row;
+                Ok(())
+            }
+            Err(e) => {
+                self.records.get_mut(id).unwrap().row.quota_error = Some(e.clone());
+                Err(e)
+            }
+        }
+    }
+    fn toggle(&mut self, id: &str, expected: bool, enabled: bool) -> Result<(), String> {
+        self.reload()?;
+        let record = self.records.get(id).ok_or("凭证已不存在")?;
+        if !record.row.editable {
+            return Err("该凭证不能独立切换".into());
+        }
+        if record.row.enabled != expected {
+            return Err("账号状态已被其他界面修改，已刷新，请重新确认".into());
+        }
+        let body = json!({"name":record.name,"auth_index":record.auth_index,"disabled":!enabled});
+        let write =
+            self.api
+                .as_ref()
+                .unwrap()
+                .call(Method::PATCH, "/credentials/status", Some(&body));
+        // Always reconcile after an attempted write; never retry a possibly applied mutation.
+        if self.reload().is_err() {
+            return Err("开关结果未确认，请刷新列表核实；暂时禁用开关".into());
+        }
+        if write.is_err() {
+            return Err("开关请求未获确认，已重新读取实际状态；没有自动重试".into());
+        }
+        if self
+            .records
+            .get(id)
+            .is_none_or(|r| r.row.enabled != enabled)
+        {
+            return Err("服务返回状态与请求不一致，已显示最新状态".into());
+        }
+        Ok(())
+    }
+}
+async fn operate(
+    app: tauri::AppHandle,
+    f: impl FnOnce(&mut Session, &tauri::AppHandle) -> Result<(), String> + Send + 'static,
+) -> Result<Snapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Management>();
+        let mut session = state
+            .0
+            .try_lock()
+            .map_err(|_| "另一项操作正在进行，请稍后重试")?;
+        session.snapshot.busy = true;
+        session.snapshot.error = None;
+        session.publish(&app);
+        if let Err(e) = f(&mut session, &app) {
+            session.snapshot.error = Some(e);
+        }
+        session.snapshot.busy = false;
+        session.publish(&app);
+        Ok(session.snapshot.clone())
+    })
+    .await
+    .map_err(|_| "本机管理任务失败".to_owned())?
+}
+#[tauri::command]
+pub async fn management_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Management>()
+            .0
+            .lock()
+            .map(|s| s.snapshot.clone())
+            .map_err(|_| "管理状态不可用".into())
+    })
+    .await
+    .map_err(|_| "管理状态不可用".to_owned())?
+}
+#[tauri::command]
+pub async fn management_connect(
+    app: tauri::AppHandle,
+    port: u16,
+    key: String,
+) -> Result<Snapshot, String> {
+    operate(app, move |s, _| {
+        s.api = None;
+        s.records.clear();
+        s.snapshot.connected = false;
+        s.snapshot.stale = false;
+        s.snapshot.port = port;
+        let api = Api::new(port, key)?;
+        s.api = Some(api);
+        if let Err(e) = s.reload() {
+            s.api = None;
+            return Err(e);
+        }
+        s.snapshot.connected = true;
+        Ok(())
+    })
+    .await
+}
+#[tauri::command]
+pub async fn management_disconnect(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    operate(app, |s, _| {
+        s.api = None;
+        s.records.clear();
+        s.snapshot.connected = false;
+        s.snapshot.stale = false;
+        Ok(())
+    })
+    .await
+}
+#[tauri::command]
+pub async fn credentials_list(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    operate(app, |s, _| s.reload()).await
+}
+#[tauri::command]
+pub async fn credential_toggle(
+    app: tauri::AppHandle,
+    id: String,
+    expected: bool,
+    enabled: bool,
+) -> Result<Snapshot, String> {
+    operate(app, move |s, _| s.toggle(&id, expected, enabled)).await
+}
+#[tauri::command]
+pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<Snapshot, String> {
+    operate(app, move |s, app| {
+        s.reload()?;
+        let ids = match id {
+            Some(id) => vec![id],
+            None => s
+                .records
+                .iter()
+                .filter(|(_, r)| r.row.enabled && r.row.supported)
+                .map(|(id, _)| id.clone())
+                .collect(),
+        };
+        let mut failed = 0;
+        for id in ids {
+            if s.quota(&id).is_err() {
+                failed += 1;
+            }
+            s.publish(app);
+        }
+        if failed > 0 {
+            Err(format!("{failed} 个凭证额度刷新失败，请查看卡片提示"))
+        } else {
+            Ok(())
+        }
+    })
+    .await
+}
+#[cfg(test)]
+mod tests;

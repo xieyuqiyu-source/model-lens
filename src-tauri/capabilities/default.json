@@ -1,6 +1,6 @@
 {
   "identifier": "desktop",
-  "description": "主窗口与菜单栏仅具备窗口操作及只读进程发现入口",
+  "description": "主窗口与菜单栏共享本机凭证管理会话；网络请求由限定地址的 Rust 命令处理",
   "windows": ["main", "tray"],
   "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

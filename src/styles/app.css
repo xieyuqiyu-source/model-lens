@@ -856,14 +856,33 @@ html[data-surface="tray"] #root {
     --surface: #303a35;
     --ink: #e4ebe6;
   }
-  .tray-app { box-shadow: inset 0 0 0 0.5px #ffffff30; }
-  .tray-app .brand { filter: invert(1); }
-  .tray-app .account-bar { background: #dce6dfcc; color: #172d21; }
-  .tray-app .tray-header select { background: #ffffff12; }
-  .tray-app .modal { background: #26332c; }
-  .tray-app .button { background: #ffffff12; color: #e4ebe6; }
-  .tray-app .button:hover:not(:disabled) { background: #ffffff24; border-color: #ffffff38; }
-  .tray-app .switch[aria-checked="true"] { background: #6e927a; }
+  .tray-app {
+    box-shadow: inset 0 0 0 0.5px #ffffff30;
+  }
+  .tray-app .brand {
+    filter: invert(1);
+  }
+  .tray-app .account-bar {
+    background: #dce6dfcc;
+    color: #172d21;
+  }
+  .tray-app .tray-header select {
+    background: #ffffff12;
+  }
+  .tray-app .modal {
+    background: #26332c;
+  }
+  .tray-app .button {
+    background: #ffffff12;
+    color: #e4ebe6;
+  }
+  .tray-app .button:hover:not(:disabled) {
+    background: #ffffff24;
+    border-color: #ffffff38;
+  }
+  .tray-app .switch[aria-checked="true"] {
+    background: #6e927a;
+  }
 }
 .tray-header {
   display: flex;
@@ -971,4 +990,96 @@ html[data-surface="tray"] #root {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Real credential data shares one native session across both windows. */
+.credential-card header > span,
+.account-bar > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.credential-card header > span {
+  flex: 1;
+}
+.credentials-notice {
+  margin: 0 0 14px;
+  flex-shrink: 0;
+}
+.credentials-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+.credentials-empty p {
+  margin-bottom: 8px;
+}
+.quota-message {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+.quota-message.has-error {
+  color: #8c4b32;
+}
+.connection-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.connection-form label {
+  display: grid;
+  gap: 8px;
+}
+.connection-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 7px;
+  padding: 10px;
+}
+.connection-form input:focus-visible {
+  outline: 2px solid #547860;
+  outline-offset: 2px;
+}
+.connection-form p {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.endpoint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.endpoint input {
+  width: 96px;
+}
+.connection-form .modal-actions {
+  margin-top: 4px;
+}
+.tray-app {
+  display: flex;
+  flex-direction: column;
+}
+.tray-app .tray-header,
+.tray-app .tray-bottom {
+  flex-shrink: 0;
+}
+.tray-app .credential-rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+  padding: 2px 0;
+}
+.tray-app .credentials-empty {
+  padding: 18px 0;
+}
+.tray-app .tray-bottom > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

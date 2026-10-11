@@ -1,4 +1,5 @@
 mod discovery;
+mod management;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -86,11 +87,18 @@ fn main() {
             show_main(app)
         }))
         .manage(DiscoveryLock(Mutex::new(())))
+        .manage(management::Management::default())
         .invoke_handler(tauri::generate_handler![
             discover_services,
             open_main,
             open_tray,
-            close_tray
+            close_tray,
+            management::management_snapshot,
+            management::management_connect,
+            management::management_disconnect,
+            management::credentials_list,
+            management::credential_toggle,
+            management::quota_refresh
         ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 ModelLens", true, None::<&str>)?;

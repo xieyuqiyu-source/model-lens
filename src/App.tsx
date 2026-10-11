@@ -14,7 +14,8 @@ import {
   Credentials,
   CredentialRows,
 } from "./features/credentials/Credentials";
-import { initialCredentials } from "./features/credentials/data";
+import { useCredentials } from "./features/credentials/useCredentials";
+import { Connection } from "./features/credentials/Connection";
 import { ImportDialog } from "./features/credentials/ImportDialog";
 import { Probe, ModelSelect } from "./features/probe/Probe";
 import { openMain, openTray, closeTray, native } from "./features/service/api";
@@ -44,7 +45,7 @@ export default function App() {
   const [focus, setFocus] = usePreference("focus", "probe");
   const [mode, setMode] = usePreference("mode", "auto");
   const [model, setModel] = usePreference("model", "Sonnet 4.5");
-  const [credentials, setCredentials] = useState(initialCredentials);
+  const credentials = useCredentials();
   const [modal, setModal] = useState("");
   const [toast, setToast] = useState("");
   const isTray =
@@ -57,12 +58,7 @@ export default function App() {
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
   }, [isTray, modal]);
-  const preview = () =>
-    setToast("当前是界面预览，此操作未请求模型或修改真实凭证。");
-  const toggle = (id: string) =>
-    setCredentials((cs) =>
-      cs.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)),
-    );
+  const preview = () => setToast("模型检测尚未接入，本次没有发起模型请求。");
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(""), 4000);
@@ -85,13 +81,11 @@ export default function App() {
             : "CLIProxy 未运行"}
     </button>
   );
-  const rows = (
-    <CredentialRows
-      credentials={credentials}
-      toggle={toggle}
-      preview={preview}
-    />
-  );
+  const connect = () => {
+    if (isTray) void openMain();
+    else setModal("connection");
+  };
+  const rows = <CredentialRows state={credentials} onConnect={connect} />;
   return (
     <div className={isTray ? "tray-app" : "app"}>
       {isTray ? (
@@ -103,10 +97,20 @@ export default function App() {
           {rows}
           <div className="tray-bottom">
             <span>
-              凭证示例 · {services.running ? "已识别本机进程" : "等待发现服务"}
+              {credentials.error
+                ? "连接或刷新异常，请打开主窗口"
+                : credentials.connected
+                  ? `${credentials.credentials.length} 个凭证`
+                  : "尚未连接"}
             </span>
-            <button className="text-button" onClick={preview}>
-              批量检测
+            <button
+              className="text-button"
+              disabled={
+                !credentials.connected || credentials.busy || credentials.stale
+              }
+              onClick={() => void credentials.refreshQuota()}
+            >
+              {credentials.busy ? "刷新中…" : "刷新额度"}
             </button>
             <button
               className="icon-button"
@@ -154,8 +158,8 @@ export default function App() {
               </button>
               <button
                 className="icon-button"
-                aria-label="设置与服务发现"
-                onClick={() => setModal("service")}
+                aria-label="管理连接设置"
+                onClick={() => setModal("connection")}
               >
                 <Settings />
               </button>
@@ -174,9 +178,9 @@ export default function App() {
               setModel={setModel}
             />
             <Credentials
-              credentials={credentials}
+              state={credentials}
               expanded={focus === "credentials"}
-              toggle={toggle}
+              onConnect={connect}
               preview={preview}
               onImport={() => setModal("import")}
               onExpand={() => setFocus("credentials")}
@@ -190,6 +194,13 @@ export default function App() {
             />
           </main>
         </>
+      )}
+      {modal === "connection" && (
+        <Connection
+          state={credentials}
+          onClose={() => setModal("")}
+          onInspect={() => setModal("service")}
+        />
       )}
       {modal === "service" && (
         <ServicePanel state={services} onClose={() => setModal("")} />
@@ -213,7 +224,7 @@ export default function App() {
             </header>
             {rows}
             <div className="tray-bottom">
-              <span>凭证为示例</span>
+              <span>真实凭证列表</span>
               <button className="text-button" onClick={preview}>
                 批量检测
               </button>

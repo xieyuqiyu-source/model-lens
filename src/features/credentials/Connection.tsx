@@ -1,0 +1,92 @@
+import { useRef, useState } from "react";
+import { Modal } from "../../components/Common";
+import type { CredentialsState } from "./useCredentials";
+export function Connection({
+  state,
+  onClose,
+  onInspect,
+}: {
+  state: CredentialsState;
+  onClose: () => void;
+  onInspect: () => void;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  const [port, setPort] = useState(String(state.port || 8317));
+  return (
+    <Modal title="连接 CLIProxy" onClose={onClose}>
+      <p className="muted">只连接本机管理接口。厂商 Token 由 CLIProxy 管理。</p>
+      <form
+        ref={form}
+        className="connection-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const input = form.current?.elements.namedItem(
+            "key",
+          ) as HTMLInputElement;
+          const key = input.value;
+          input.value = "";
+          if (await state.connect(Number(port), key)) onClose();
+        }}
+      >
+        <label>
+          本机管理端口
+          <div className="endpoint">
+            <span>http://127.0.0.1:</span>
+            <input
+              aria-label="管理端口"
+              type="number"
+              min="1"
+              max="65535"
+              required
+              value={port}
+              disabled={state.busy}
+              onChange={(e) => setPort(e.target.value)}
+            />
+          </div>
+        </label>
+        <label>
+          管理密钥
+          <input
+            name="key"
+            aria-label="管理密钥"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            required
+            maxLength={8192}
+            disabled={state.busy}
+            placeholder="在这里输入，不要发到聊天里"
+          />
+        </label>
+        <p className="muted">
+          仅用于本次运行，退出应用后清除。不会读取已有认证文件或保存到浏览器存储。
+        </p>
+        {state.error && (
+          <p className="notice" role="alert">
+            {state.error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="text-button" onClick={onInspect}>
+            查看服务位置
+          </button>
+          <div className="actions">
+            {state.connected && (
+              <button
+                type="button"
+                className="button"
+                disabled={state.busy}
+                onClick={() => void state.disconnect()}
+              >
+                断开连接
+              </button>
+            )}
+            <button className="button primary" disabled={state.busy}>
+              {state.busy ? "处理中…" : "连接并读取列表"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
