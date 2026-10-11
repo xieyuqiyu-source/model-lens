@@ -274,7 +274,7 @@ export function Credentials(p: Props) {
             <ArrowUpRight size={14} />
           </button>
           <span className="preview-caption">
-            模型检测尚未接入 · 账号开关立即生效
+            账号开关立即生效
           </span>
         </>
       )}

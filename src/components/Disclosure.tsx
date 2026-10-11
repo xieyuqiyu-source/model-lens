@@ -2,11 +2,9 @@ import { useId, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 export function Disclosure({
   title,
-  hint,
   children,
 }: {
   title: string;
-  hint: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -22,7 +20,6 @@ export function Disclosure({
       >
         <span>{title}</span>
         <span>
-          {hint}
           <ChevronDown size={12} />
         </span>
       </button>

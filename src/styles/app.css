@@ -39,13 +39,6 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
-button:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 button,
 select {
   touch-action: manipulation;
@@ -290,7 +283,6 @@ select {
   height: 36px;
   background: var(--surface);
   width: 100%;
-  outline-offset: 3px;
 }
 .start {
   margin-left: auto;
@@ -672,7 +664,6 @@ details p {
 .manual-input textarea,
 .json-input {
   width: 100%;
-  min-height: 180px;
   resize: vertical;
   border: 0;
   border-radius: 8px;
@@ -680,10 +671,11 @@ details p {
   padding: 16px;
   line-height: 1.8;
 }
-.manual-input .meta {
+.manual-input textarea {
   display: block;
-  margin-top: 12px;
+  min-height: calc(2lh + 32px);
 }
+.json-input { min-height: 180px; }
 textarea::placeholder {
   color: var(--muted);
 }
@@ -981,10 +973,6 @@ html[data-surface="tray"] #root {
   border-radius: 7px;
   padding: 10px;
 }
-.connection-form input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 .connection-form p {
   font-size: 11px;
   line-height: 1.7;
@@ -1056,6 +1044,11 @@ html[data-appearance="dark"] img.brand { filter: invert(1); }
 .track { height: 5px; }
 .account-bar[data-quota="missing"] { background: var(--surface); color: var(--text); }
 .off .account-bar { color: var(--muted); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-/* WebKit 自动聚焦弹窗及恢复焦点时，鼠标操作也可能匹配 :focus-visible。 */
-[data-keyboard-focus="false"] :focus-visible:not(input):not(textarea) { outline: none; }
+:focus { outline: none; }
+/* WebKit 的自动焦点不代表键盘操作；仅键盘导航和文本输入显示柔和阴影。 */
+:root [data-keyboard-focus="true"] :focus-visible:not(.select-menu),
+input:focus,
+textarea:focus {
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:where([tabindex]):not(.select-menu) { transition: box-shadow var(--motion-fast); }

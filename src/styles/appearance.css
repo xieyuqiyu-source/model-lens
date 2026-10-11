@@ -4,7 +4,7 @@
 .appearance-modes button[aria-pressed="true"] { background: var(--paper); color: var(--accent); box-shadow: 0 1px 4px var(--shadow); }
 .palette-options { display: grid; gap: 8px; }
 .palette-options button { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--border); text-align: left; }
-.palette-options button[aria-pressed="true"] { border-color: var(--accent); background: var(--hover); }
+.palette-options button[aria-pressed="true"] { background: var(--hover); box-shadow: 0 2px 8px var(--shadow); }
 .palette-options button > span:nth-child(2) { display: grid; gap: 4px; flex: 1; }
 .palette-options strong { font-size: 12px; font-weight: 500; }
 .palette-options small { color: var(--muted); font-size: 10px; }

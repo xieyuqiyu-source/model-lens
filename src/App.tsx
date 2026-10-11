@@ -221,7 +221,7 @@ export default function App() {
           <div className="empty">
             <History size={28} />
             <p>还没有检测记录</p>
-            <span>当前为第一阶段 UI 预览，真实检测将在后续版本接入。</span>
+            <span>真实检测尚未接入。</span>
           </div>
         </Modal>
       )}
