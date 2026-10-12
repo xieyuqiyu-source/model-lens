@@ -4,7 +4,14 @@ use tauri::Manager;
 
 const INTERVAL: Duration = Duration::from_secs(300);
 fn eligible(s: &Session) -> bool {
-    s.snapshot.connected && !s.snapshot.busy && s.records.values().any(|r| r.row.supported)
+    s.snapshot.connected
+        && !s.snapshot.busy
+        && !s
+            .snapshot
+            .account_tests
+            .values()
+            .any(super::probe::account::active)
+        && s.records.values().any(|r| r.row.supported)
 }
 pub fn start(app: tauri::AppHandle) {
     // One process-owned timer continues while either WebView is hidden.
@@ -39,6 +46,26 @@ mod tests {
         s.snapshot.busy = true;
         assert!(!eligible(&s));
         s.snapshot.busy = false;
+        s.snapshot.account_tests.insert(
+            "synthetic".into(),
+            super::super::probe::account::AccountTest {
+                run_id: 1,
+                credential_id: "synthetic".into(),
+                credential: "synthetic".into(),
+                model: "gpt-5.4".into(),
+                status: "running".into(),
+                message: String::new(),
+                at: super::super::now(),
+                identity: String::new(),
+            },
+        );
+        assert!(!eligible(&s));
+        s.snapshot
+            .account_tests
+            .get_mut("synthetic")
+            .unwrap()
+            .status = "unknown".into();
+        assert!(eligible(&s));
         s.records.values_mut().for_each(|r| r.row.supported = false);
         assert!(!eligible(&s));
     }

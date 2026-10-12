@@ -63,7 +63,8 @@ export default function App() {
   const probe = useProbe(credentials);
   const [modal, setModal] = useState("");
   const [toast, setToast] = useState("");
-  const accountProbe = useAccountProbe(credentials, probe.model?.id ?? "", setToast);
+  const [accountHistoryId, setAccountHistoryId] = useState<number | null>(null);
+  const accountProbe = useAccountProbe(credentials, probe.model?.id ?? "", setToast, runId => { setAccountHistoryId(runId); setModal("history"); });
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
   useEffect(() => {
@@ -120,7 +121,7 @@ export default function App() {
           {rows}
           <div className="tray-bottom">
             <span>
-              {traySummary(credentials)}
+              {accountProbe.activeCount ? `后台探查 ${accountProbe.activeCount}/3` : traySummary(credentials)}
             </span>
             <button
               className="text-button"
@@ -131,6 +132,7 @@ export default function App() {
             >
               {credentials.busy ? "刷新中…" : "刷新额度"}
             </button>
+            <button className="icon-button small" aria-label="历史" onClick={() => { setAccountHistoryId(null); setModal("history"); }}><History size={13} /></button>
             <button className="icon-button" aria-label="外观设置" title="外观设置" onClick={() => setModal("appearance")}><Palette size={14} /></button>
             <button
               className="icon-button"
@@ -168,9 +170,10 @@ export default function App() {
               <button
                 className="icon-button"
                 aria-label="历史"
-                onClick={() => setModal("history")}
+                onClick={() => { setAccountHistoryId(null); setModal("history"); }}
               >
                 <History size={15} />
+                {accountProbe.activeCount > 0 && <small>{accountProbe.activeCount}/3</small>}
               </button>
               <button
                 className="icon-button"
@@ -227,7 +230,7 @@ export default function App() {
       {modal === "import" && <ImportDialog state={credentials} onClose={() => setModal("")} />}
       {modal === "history" && (
         <Modal title="检测历史" onClose={() => setModal("")}>
-          <ProbeHistory state={probe} onChoose={() => { setModal(""); changeFocus("probe"); }} />
+          <ProbeHistory state={probe} accountHistory={credentials.accountHistory ?? []} selectedId={accountHistoryId} onSelect={setAccountHistoryId} accountProbe={accountProbe} notify={setToast} onChoose={() => { setModal(""); changeFocus("probe"); }} />
         </Modal>
       )}
       {modal === "tray" && (

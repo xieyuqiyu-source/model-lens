@@ -62,3 +62,8 @@ fieldset.probe-form {
 
 .probe > .notice { margin: 12px 0 16px; padding: 12px 16px; line-height: 1.6; overflow-wrap: anywhere; }
 .probe > .notice + .result { margin-top: 16px; }
+.account-history-detail { display: grid; gap: 12px; min-width: 0; }
+.account-history-detail > p { margin: 0; overflow-wrap: anywhere; }
+.account-history-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; font-size: 11px; }
+.account-history-detail .result { margin: 0; }
+.probe-history .button > span, .probe-history .button > small { overflow-wrap: anywhere; }

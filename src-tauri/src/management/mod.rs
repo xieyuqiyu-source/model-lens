@@ -55,6 +55,7 @@ pub struct Snapshot {
     pub error: Option<String>,
     pub revision: u64,
     pub account_tests: HashMap<String, probe::account::AccountTest>,
+    pub account_history: Vec<probe::account::History>,
 }
 #[derive(Clone)]
 struct Record {

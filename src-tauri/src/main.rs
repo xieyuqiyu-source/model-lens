@@ -124,8 +124,8 @@ fn main() {
             management::quota_refresh,
             management::probe::probe_models,
             management::probe::probe_sample,
-            management::probe::account::probe_account_samples,
-            management::probe::account::probe_account_finish
+            management::probe::account::commands::probe_account_samples,
+            management::probe::account::commands::probe_account_finish
         ])
         .setup(|app| {
             management::start_quota_timer(app.handle().clone());

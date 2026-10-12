@@ -18,7 +18,7 @@ pub struct Model {
     name: String,
     brand: String,
 }
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Answer {
     text: String,

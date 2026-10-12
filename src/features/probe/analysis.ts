@@ -69,7 +69,7 @@ export type Detection = ReturnType<typeof analyzeSamples>;
 export type ProbeRecord = Detection & {
   id: string;
   at: number;
-  source: "auto";
+  source: "auto" | "account";
   model: string;
   credential: string;
   attempts: Sample[];

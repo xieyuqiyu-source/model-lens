@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Detection, Sample } from "./analysis";
+import type { Challenge, Detection, Sample } from "./analysis";
 export type ProbeModel = { id: string; name: string; brand: string };
 export type Answer = {
   text: string;
@@ -8,7 +8,7 @@ export type Answer = {
   elapsedMs: number;
 };
 export const probeApi = {
-  accountSamples: (id: string, model: string, prompts: string[]) => invoke<{runId: number; answers: Answer[]; error: string | null}>("probe_account_samples", {id, model, prompts}),
+  accountSamples: (id: string, model: string, challenges: Challenge[], previousRunId?: number) => invoke<{runId: number; samples: Sample[]; error: string | null}>("probe_account_samples", {id, model, challenges, previousRunId}),
   accountFinish: (id: string, runId: number, status: string, message: string) => invoke<void>("probe_account_finish", {id, runId, status, message}),
   models: (id: string) => invoke<ProbeModel[]>("probe_models", { id }),
   sample: (id: string, model: string, prompt: string) =>

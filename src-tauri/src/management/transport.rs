@@ -2,6 +2,7 @@ use reqwest::{blocking::Client, redirect::Policy, Method};
 use serde_json::Value;
 use std::{io::Read, time::Duration};
 
+#[derive(Clone)]
 pub struct Api {
     client: Client,
     port: u16,
