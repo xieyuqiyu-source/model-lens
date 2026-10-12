@@ -34,7 +34,7 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'discover_services') return {services:[],checkedAt:0,statusKnown:true,warning:null};
     if (cmd === 'set_appearance') return;
     if (cmd === 'probe_models') return [];
-    if (!['management_snapshot','credential_import','credential_delete','quota_refresh','credentials_list','credentials_toggle','credentials_delete','copy_client_key'].includes(cmd))
+    if (!['management_snapshot','credential_toggle','credential_import','credential_delete','quota_refresh','credentials_list','credentials_toggle','credentials_delete','copy_client_key'].includes(cmd))
       throw new Error(`Unexpected mock command: ${cmd}`);
     const s = window.__testSnapshot;
     if (cmd !== 'management_snapshot') {
@@ -46,6 +46,10 @@ window.__TAURI_INTERNALS__ = {
         s.stale = Boolean(window.__testStale);
       } else if (cmd === 'copy_client_key') {
         window.__testKeyCopies = (window.__testKeyCopies || 0) + 1;
+      } else if (cmd === 'credential_toggle') {
+        const r = s.credentials.find(r => r.id === args.id);
+        if (!r || r.enabled !== args.expected) s.error = '凭证已变化';
+        else { r.enabled = args.enabled; r.deleteToken += '-changed'; }
       } else if (cmd === 'credentials_toggle' || cmd === 'credentials_delete') {
         const targets = args.targets;
         if (targets.some(t => !s.credentials.some(r => r.id === t.id && r.deleteToken === t.deleteToken && r.enabled === t.enabled))) s.error = '凭证已变化，请重新选择';

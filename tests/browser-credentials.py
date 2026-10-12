@@ -10,12 +10,27 @@ with sync_playwright() as p:
         browser = engine.launch(headless=True)
         context = browser.new_context(viewport={'width': 1120, 'height': 760})
         context.add_init_script(path=fixture)
+        context.add_init_script(script='__testSnapshot.credentials[1].enabled = true')
         page = context.new_page()
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(url)
         stopped = page.locator('article').filter(has_text='stopped@example.invalid')
         expect(stopped).to_be_visible()
+        # Individual switches preserve card and compact row positions in mixed states.
+        for focus, selector in [('凭证优先', '.credential-card'), ('探查优先', '.credential-row')]:
+            page.get_by_role('button', name=focus, exact=True).click()
+            switches = page.locator(selector).get_by_role('switch')
+            expect(switches).to_have_count(2)
+            original = switches.evaluate_all('(xs)=>xs.map(x=>x.getAttribute("aria-label"))')
+            target = page.get_by_role('switch', name='stopped@example.invalid 凭证开关', exact=True)
+            for enabled in ['true', 'false']:
+                target.click()
+                expect(target).to_have_attribute('aria-checked', enabled)
+                expect(target).to_be_enabled()
+                assert switches.evaluate_all('(xs)=>xs.map(x=>x.getAttribute("aria-label"))') == original
+        page.get_by_role('button', name='凭证优先', exact=True).click()
+        page.evaluate('__testCalls.length = 0')
         refresh = stopped.get_by_role('button', name='刷新额度', exact=True)
         expect(refresh).to_be_enabled()
         refresh.click()
@@ -102,7 +117,15 @@ with sync_playwright() as p:
         refresh_tray.click()
         expect(tray.get_by_role('switch', name='stopped@example.invalid 凭证开关')).to_have_attribute('aria-checked', 'false')
         expect(refresh_tray).to_be_enabled()
+        tray_switches = tray.locator('.credential-row').get_by_role('switch')
+        original = tray_switches.evaluate_all('(xs)=>xs.map(x=>x.getAttribute("aria-label"))')
+        target = tray.get_by_role('switch', name='stopped@example.invalid 凭证开关', exact=True)
+        for enabled in ['true', 'false']:
+            target.click()
+            expect(target).to_have_attribute('aria-checked', enabled)
+            expect(target).to_be_enabled()
+            assert tray_switches.evaluate_all('(xs)=>xs.map(x=>x.getAttribute("aria-label"))') == original
         assert not errors, errors
-        print(f'{engine.name}: 停用查询、文件/粘贴导入、冲突与错误、确认删除、外部变更、菜单栏通过')
+        print(f'{engine.name}: 停用查询、文件/粘贴导入、冲突与错误、确认删除、外部变更、卡片/紧凑/菜单栏开关顺序稳定通过')
         context.close()
         browser.close()

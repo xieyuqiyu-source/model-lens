@@ -9,7 +9,7 @@ import {
   ListRestart,
 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
-import { activeCredentialsFirst, compactQuota, type Credential } from "./data";
+import { compactQuota, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
 import type { AccountProbeState } from "../probe/useAccountProbe";
 import { AccountTestButton, accountTestState } from "./AccountTestButton";
@@ -54,7 +54,7 @@ export function CredentialRows({
           </button>
         </div>
       )}
-      {activeCredentialsFirst(state.credentials).map((c) => {
+      {state.credentials.map((c) => {
         const quota = compactQuota(c);
         const test = accountTestState(state.accountTests?.[c.id], accountProbe.model);
         return (

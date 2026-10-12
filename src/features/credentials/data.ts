@@ -52,10 +52,6 @@ export function traySummary(state: Pick<ManagementSnapshot, "connected" | "busy"
   return state.error ? `${count} · 刷新失败` : count;
 }
 
-export function activeCredentialsFirst(rows: Credential[]): Credential[] {
-  return [...rows.filter((row) => row.enabled), ...rows.filter((row) => !row.enabled)];
-}
-
 export function credentialQuotas(c: Credential): QuotaItem[] {
   if (c.quotaItems?.length) return c.quotaItems;
   if (["codex", "claude"].includes(c.provider)) return [
