@@ -8,6 +8,8 @@ export type Answer = {
   elapsedMs: number;
 };
 export const probeApi = {
+  accountSamples: (id: string, model: string, prompts: string[]) => invoke<{runId: number; answers: Answer[]; error: string | null}>("probe_account_samples", {id, model, prompts}),
+  accountFinish: (id: string, runId: number, status: string, message: string) => invoke<void>("probe_account_finish", {id, runId, status, message}),
   models: (id: string) => invoke<ProbeModel[]>("probe_models", { id }),
   sample: (id: string, model: string, prompt: string) =>
     invoke<Answer>("probe_sample", { id, model, prompt }),

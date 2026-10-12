@@ -11,12 +11,15 @@ import {
 import { Brand, Toggle } from "../../components/Common";
 import { activeCredentialsFirst, compactQuota, type Credential } from "./data";
 import type { CredentialsState } from "./useCredentials";
+import type { AccountProbeState } from "../probe/useAccountProbe";
+import { AccountTestButton, accountTestState } from "./AccountTestButton";
 import { PlanBadge } from "./PlanBadge";
 import { CredentialCard } from "./CredentialCard";
 import { CredentialTools } from "./CredentialTools";
 import { BatchDeleteDialog } from "./BatchDeleteDialog";
 import { DeleteDialog } from "./DeleteDialog";
 type Props = {
+  accountProbe: AccountProbeState;
   state: CredentialsState;
   expanded: boolean;
   preview: (id: string) => void;
@@ -30,9 +33,11 @@ function disabled(state: CredentialsState, c: Credential) {
 }
 export function CredentialRows({
   state,
+  accountProbe,
   onConnect,
 }: {
   state: CredentialsState;
+  accountProbe: AccountProbeState;
   onConnect: () => void;
 }) {
   return (
@@ -51,11 +56,13 @@ export function CredentialRows({
       )}
       {activeCredentialsFirst(state.credentials).map((c) => {
         const quota = compactQuota(c);
+        const test = accountTestState(state.accountTests?.[c.id], accountProbe.model);
         return (
         <div className={`credential-row ${!c.enabled ? "off" : ""}`} key={c.id}>
           <Brand name={c.brand} />
           <div
             className={`account-bar ${quota.weekly ? "weekly" : ""}`}
+            data-test={test?.status}
             data-quota={quota.value === null ? "missing" : "known"}
             data-error={Boolean(c.quotaError)}
             style={{ "--quota-width": `${quota.value ?? 0}%` } as CSSProperties}
@@ -83,6 +90,7 @@ export function CredentialRows({
           >
             <RefreshCw className={state.busy ? "spin" : ""} />
           </button>
+          <AccountTestButton credential={c} probe={accountProbe} test={state.accountTests?.[c.id]} />
           <Toggle
             on={c.enabled}
             label={`${c.name} 凭证开关`}
@@ -167,7 +175,7 @@ export function Credentials(p: Props) {
         <>
           <div className="credential-grid">
             {s.credentials.map((c) => (
-              <CredentialCard key={c.id} c={c} state={s} preview={p.preview} onDelete={setDeleting} selected={selected.includes(c.id)} onSelect={() => setSelected(ids => ids.includes(c.id) ? ids.filter(id => id !== c.id) : [...ids, c.id])} />
+              <CredentialCard key={c.id} c={c} state={s} accountProbe={p.accountProbe} preview={p.preview} onDelete={setDeleting} selected={selected.includes(c.id)} onSelect={() => setSelected(ids => ids.includes(c.id) ? ids.filter(id => id !== c.id) : [...ids, c.id])} />
             ))}
           </div>
           <div className="section-foot">
@@ -176,7 +184,7 @@ export function Credentials(p: Props) {
         </>
       ) : (
         <>
-          <CredentialRows state={s} onConnect={p.onConnect} />
+          <CredentialRows state={s} onConnect={p.onConnect} accountProbe={p.accountProbe} />
           <div className="batch">
             <button
               className="button"

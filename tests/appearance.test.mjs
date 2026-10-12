@@ -26,7 +26,7 @@ for (const [palette, modes] of Object.entries(themes)) for (const [mode, t] of O
       ...['paper','surface','hover','track'].flatMap(bg => [['text',bg,4.5], ['muted',bg,4.5]]),
       ['on-accent','accent',4.5], ['on-accent','accent-hover',4.5],
       ['quota-text','green',4.5], ['quota-text','dark-green',4.5],
-      ['green','track',3], ['dark-green','track',3], ['accent','paper',3], ['accent','surface',3],
+      ['green','dark-green',1.6], ['green','track',3], ['dark-green','track',3], ['accent','paper',3], ['accent','surface',3],
       ['border','surface',3], ['border','paper',3], ['warning','paper',4.5], ['error','paper',4.5],
       ...['plan-free','plan-plus','plan-pro'].map(fg => [fg,'paper',4.5]),
     ]) assert.ok(contrast(t[fg],t[bg]) >= min, `${fg}/${bg}: ${contrast(t[fg],t[bg]).toFixed(2)} < ${min}`);

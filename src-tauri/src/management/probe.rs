@@ -1,4 +1,7 @@
 //! CLIProxy owns provider selection, aliases and credential routing. Keys stay in Rust.
+pub mod account;
+mod pinned;
+mod pinned_response;
 mod response;
 #[cfg(test)]
 mod tests;

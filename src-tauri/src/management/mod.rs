@@ -5,6 +5,7 @@ mod mutations;
 pub mod probe;
 mod quota;
 mod quota_cache;
+mod quota_timer;
 mod transport;
 use reqwest::Method;
 use serde::Serialize;
@@ -53,6 +54,7 @@ pub struct Snapshot {
     pub credentials: Vec<Credential>,
     pub error: Option<String>,
     pub revision: u64,
+    pub account_tests: HashMap<String, probe::account::AccountTest>,
 }
 #[derive(Clone)]
 struct Record {
@@ -182,6 +184,14 @@ fn normalize(payload: &Value) -> Result<HashMap<String, Record>, String> {
 }
 impl Session {
     fn publish(&mut self, app: &tauri::AppHandle) {
+        self.snapshot.account_tests.retain(|id, test| {
+            // Keep an active lease until its task finishes; discard stale completed borders.
+            matches!(test.status.as_str(), "running" | "analyzing")
+                || self
+                    .records
+                    .get(id)
+                    .is_some_and(|r| probe::account::identity(r) == test.identity)
+        });
         self.snapshot.credentials = self.records.values().map(|r| r.row.clone()).collect();
         self.snapshot
             .credentials
@@ -384,24 +394,7 @@ pub async fn credential_toggle(
 }
 #[tauri::command]
 pub async fn quota_refresh(app: tauri::AppHandle, id: Option<String>) -> Result<Snapshot, String> {
-    operate(app, move |s, app| {
-        s.reload()?;
-        let ids = s.quota_targets(id);
-        let mut failed = 0;
-        for id in ids {
-            if s.quota(&id).is_err() {
-                failed += 1;
-            }
-            s.publish(app);
-        }
-        quota_cache::persist(app, s)?;
-        if failed > 0 {
-            Err(format!("{failed} 个凭证额度刷新失败，请查看卡片提示"))
-        } else {
-            Ok(())
-        }
-    })
-    .await
+    operate(app, move |s, app| s.refresh_quotas(app, id)).await
 }
 #[cfg(test)]
 mod tests;
@@ -422,3 +415,23 @@ pub async fn credential_delete(
 ) -> Result<Snapshot, String> {
     operate(app, move |s, _| s.delete_credential(&id, &expected)).await
 }
+
+impl Session {
+    fn refresh_quotas(&mut self, app: &tauri::AppHandle, id: Option<String>) -> Result<(), String> {
+        self.reload()?;
+        let mut failed = 0;
+        for id in self.quota_targets(id) {
+            if self.quota(&id).is_err() {
+                failed += 1;
+            }
+            self.publish(app);
+        }
+        quota_cache::persist(app, self)?;
+        if failed > 0 {
+            Err(format!("{failed} 个凭证额度刷新失败，请查看卡片提示"))
+        } else {
+            Ok(())
+        }
+    }
+}
+pub use quota_timer::start as start_quota_timer;

@@ -197,29 +197,7 @@ pub(super) fn fetch(api: &Api, record: &Record) -> Result<Value, String> {
                 header["User-Agent"] =
                     json!("antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)");
             }
-            let mut project = record.project_id.clone();
-            if project.is_empty() {
-                // Read-only project discovery. Never download auth files or call onboardUser.
-                let info = request(
-                    api,
-                    record,
-                    "POST",
-                    &format!("{base}/v1internal:loadCodeAssist"),
-                    &header,
-                    Some(
-                        json!({"metadata":{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}}),
-                    ),
-                )?;
-                project = text(&info, "cloudaicompanionProject");
-                if project.is_empty() {
-                    project = text(&info["cloudaicompanionProject"], "id");
-                }
-                if project.is_empty() {
-                    return Err(
-                        "Gemini 未提供项目标识，请先在对应客户端完成账号登录／项目配置".into(),
-                    );
-                }
-            }
+            let project = project(api, record, base, &header)?;
             let action = if antigravity {
                 "retrieveUserQuotaSummary"
             } else {
@@ -257,4 +235,35 @@ pub(super) fn fetch(api: &Api, record: &Record) -> Result<Value, String> {
         }
     }
     primary
+}
+
+pub(in crate::management) fn project(
+    api: &Api,
+    record: &Record,
+    base: &str,
+    header: &Value,
+) -> Result<String, String> {
+    let mut project = record.project_id.clone();
+    if project.is_empty() {
+        // Read-only project discovery. Never download auth files or call onboardUser.
+        let info = request(
+            api,
+            record,
+            "POST",
+            &format!("{base}/v1internal:loadCodeAssist"),
+            &header,
+            Some(
+                json!({"metadata":{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}}),
+            ),
+        )?;
+        project = text(&info, "cloudaicompanionProject");
+        if project.is_empty() {
+            project = text(&info["cloudaicompanionProject"], "id");
+        }
+        if project.is_empty() {
+            return Err("Gemini 未提供项目标识，请先在对应客户端完成账号登录／项目配置".into());
+        }
+    }
+
+    Ok(project)
 }

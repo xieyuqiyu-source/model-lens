@@ -45,6 +45,15 @@ impl Api {
     ) -> Result<Value, String> {
         self.call_request(method, path, query, body, Duration::from_secs(25))
     }
+    pub fn call_with_timeout(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        self.call_request(method, path, &[], body, timeout)
+    }
     fn call_request(
         &self,
         method: Method,

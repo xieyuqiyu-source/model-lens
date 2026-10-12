@@ -123,9 +123,12 @@ fn main() {
             management::credential_delete,
             management::quota_refresh,
             management::probe::probe_models,
-            management::probe::probe_sample
+            management::probe::probe_sample,
+            management::probe::account::probe_account_samples,
+            management::probe::account::probe_account_finish
         ])
         .setup(|app| {
+            management::start_quota_timer(app.handle().clone());
             let open = MenuItem::with_id(app, "open", "打开 ModelLens", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出 ModelLens", true, Some("CmdOrCtrl+Q"))?;
             let menu = Menu::with_items(app, &[&open, &quit])?;

@@ -1,7 +1,7 @@
 pub(super) mod codex;
 #[cfg(test)]
 mod provider_tests;
-mod providers;
+pub(super) mod providers;
 
 use super::{transport::Api, Credential, Record};
 #[cfg(test)]

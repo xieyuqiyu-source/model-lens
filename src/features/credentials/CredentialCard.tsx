@@ -1,6 +1,8 @@
 import { ArrowUpRight, RefreshCw, Trash2 } from "lucide-react";
 import { Brand, Toggle } from "../../components/Common";
 import { credentialQuotas, resetLabel, type Credential } from "./data";
+import type { AccountProbeState } from "../probe/useAccountProbe";
+import { AccountTestButton, accountTestState } from "./AccountTestButton";
 import { PlanBadge } from "./PlanBadge";
 import type { CredentialsState } from "./useCredentials";
 function Quota({
@@ -41,11 +43,13 @@ function Quota({
     </div>
   );
 }
-export function CredentialCard({ c, state: s, preview, onDelete, selected, onSelect }: {
+export function CredentialCard({ c, state: s, accountProbe, preview, onDelete, selected, onSelect }: {
+  accountProbe: AccountProbeState;
   c: Credential; state: CredentialsState; preview: (id: string) => void; onDelete: (c: Credential) => void; selected: boolean; onSelect: () => void;
 }) {
   return (
               <article
+                data-test={accountTestState(s.accountTests?.[c.id], accountProbe.model)?.status}
                 className={`credential-card ${!c.enabled ? "off" : ""}`}
 
               >
@@ -102,6 +106,7 @@ export function CredentialCard({ c, state: s, preview, onDelete, selected, onSel
                     探查模型
                     <ArrowUpRight size={12} />
                   </button>
+                  <AccountTestButton credential={c} probe={accountProbe} test={s.accountTests?.[c.id]} />
                   <button className="icon-button small credential-delete" aria-label={`删除 ${c.name}`} title={c.deletable ? "删除凭证" : "此凭证没有可删除的独立文件"}
                     disabled={s.busy || s.stale || !s.connected || !c.deletable} onClick={() => onDelete(c)}>
                     <Trash2 size={13} />

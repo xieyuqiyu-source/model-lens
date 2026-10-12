@@ -115,6 +115,7 @@ impl Session {
         self.initialized = true;
         self.api = None;
         self.records.clear();
+        self.snapshot.account_tests.clear();
         self.snapshot.connected = false;
         self.snapshot.stale = false;
     }

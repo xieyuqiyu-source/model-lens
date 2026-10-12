@@ -18,6 +18,7 @@ import { useCredentials } from "./features/credentials/useCredentials";
 import { Connection } from "./features/credentials/Connection";
 import { ImportDialog } from "./features/credentials/ImportDialog";
 import { Probe, ModelSelect } from "./features/probe/Probe";
+import { useAccountProbe } from "./features/probe/useAccountProbe";
 import { useProbe } from "./features/probe/useProbe";
 import { ProbeHistory } from "./features/probe/ProbeHistory";
 import { openMain, openTray, closeTray, native } from "./features/service/api";
@@ -62,6 +63,7 @@ export default function App() {
   const probe = useProbe(credentials);
   const [modal, setModal] = useState("");
   const [toast, setToast] = useState("");
+  const accountProbe = useAccountProbe(credentials, probe.model?.id ?? "", setToast);
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
   useEffect(() => {
@@ -102,7 +104,7 @@ export default function App() {
     if (isTray) void openMain();
     else setModal("connection");
   };
-  const rows = <CredentialRows state={credentials} onConnect={connect} />;
+  const rows = <CredentialRows state={credentials} onConnect={connect} accountProbe={accountProbe} />;
   return (
     <div
       className={isTray ? "tray-app" : "app"}
@@ -194,6 +196,7 @@ export default function App() {
             />
             <Credentials
               state={credentials}
+              accountProbe={accountProbe}
               expanded={focus === "credentials"}
               onConnect={connect}
               preview={preview}
