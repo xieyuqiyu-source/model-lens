@@ -180,11 +180,11 @@ pub async fn cpa_pull(app: tauri::AppHandle) -> Result<String, String> {
     jobs::run(app, move |app| {
         let executable = crate::discovery::connected_executable(port)?;
         let layout = runtime::Layout::existing(&executable, port)?;
-        jobs::phase(app, "正在获取 CPA 更新…");
+        jobs::phase(app, "$ git fetch → merge --ff-only · 正在获取更新…");
         let result = pull(&layout.repository)?;
-        jobs::phase(app, "正在编译 CPA，原服务继续运行…");
+        jobs::phase(app, "$ go build ./cmd/server · 正在编译，原服务继续运行…");
         let staged = runtime::build(&layout)?;
-        jobs::phase(app, "正在重启 CPA…");
+        jobs::phase(app, "$ SIGTERM → CPA --config config.yaml · 正在更新重启…");
         runtime::replace_and_restart(&layout, staged)?;
         Ok(format!("CPA 已编译并重启 · {}", &result.after[..7]))
     })

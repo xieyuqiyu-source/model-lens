@@ -126,7 +126,7 @@ fn main() {
             management::cpa::cpa_open_management,
             management::cpa::cpa_pull,
             management::cpa::jobs::cpa_job,
-            management::cpa::jobs::cpa_start,
+            management::cpa::jobs::cpa_set_running,
             management::cpa::jobs::cpa_install,
             management::cpa::jobs::cpa_choose_directory,
             management::probe::probe_models,

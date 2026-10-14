@@ -9,12 +9,45 @@ static JOB: Mutex<Job> = Mutex::new(Job {
     busy: false,
     message: String::new(),
     revision: 0,
+    logs: Vec::new(),
 });
 #[derive(Clone, serde::Serialize)]
 pub struct Job {
     busy: bool,
     message: String,
     revision: u64,
+    logs: Vec<LogEntry>,
+}
+#[derive(Clone, serde::Serialize)]
+struct LogEntry {
+    id: u64,
+    at: u64,
+    message: String,
+}
+impl Job {
+    fn record(&mut self, message: String) {
+        self.revision += 1;
+        self.logs.push(LogEntry {
+            id: self.revision,
+            at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            message,
+        });
+        if self.logs.len() > 100 {
+            self.logs.remove(0);
+        }
+    }
+}
+fn log(app: &tauri::AppHandle, message: String) {
+    if let Ok(mut job) = JOB.lock() {
+        if !job.busy {
+            job.message = message.clone();
+        }
+        job.record(message);
+        let _ = app.emit("cpa-job", job.clone());
+    }
 }
 struct Guard {
     app: tauri::AppHandle,
@@ -44,8 +77,8 @@ impl Drop for Guard {
 fn report(app: &tauri::AppHandle, busy: bool, message: String) {
     if let Ok(mut job) = JOB.lock() {
         job.busy = busy;
-        job.message = message;
-        job.revision += 1;
+        job.message = message.clone();
+        job.record(message);
         let _ = app.emit("cpa-job", job.clone());
     }
 }
@@ -63,6 +96,7 @@ pub(super) async fn run(
     action: impl FnOnce(&tauri::AppHandle) -> Result<String, String> + Send + 'static,
 ) -> Result<String, String> {
     if BUSY.swap(true, Ordering::AcqRel) {
+        log(&app, "CPA 操作正在进行，未执行重复请求".into());
         return Err("CPA 操作正在进行".into());
     }
     // Ownership is acquired before spawning so cancellation cannot leave the gate locked.
@@ -75,13 +109,17 @@ pub(super) async fn run(
         let mut guard = guard;
         {
             let state = app.state::<Management>();
-            let mut s = state.0.try_lock().map_err(|_| "管理操作正在进行")?;
+            let mut s = state.0.try_lock().map_err(|_| {
+                log(&app, "管理操作正在进行，未执行 CPA 命令".into());
+                "管理操作正在进行"
+            })?;
             if s.snapshot.busy
                 || s.snapshot
                     .account_tests
                     .values()
                     .any(super::super::probe::account::active)
             {
+                log(&app, "请等待当前凭证操作或探查结束，未执行 CPA 命令".into());
                 return Err("请等待当前凭证操作或探查结束".into());
             }
             s.snapshot.busy = true;
@@ -106,10 +144,12 @@ pub(super) async fn run(
     result
 }
 #[tauri::command]
-pub async fn cpa_start(
+pub async fn cpa_set_running(
     app: tauri::AppHandle,
     executable: String,
     port: u16,
+    running: bool,
+    expected_pid: Option<u32>,
 ) -> Result<String, String> {
     run(app, move |app| {
         let snapshot =
@@ -117,18 +157,47 @@ pub async fn cpa_start(
         if !snapshot.status_known {
             return Err("进程状态未知，请先重新检测".into());
         }
-        if !snapshot
+        let service = snapshot
             .services
             .iter()
-            .any(|s| s.location.executable == executable)
-        {
-            return Err("该目录未经过服务发现，请重新检测".into());
+            .find(|s| s.location.executable == executable)
+            .ok_or("该目录未经过服务发现，请重新检测")?;
+        if service.pid != expected_pid {
+            return Err("CPA 进程已变化，请重新检测后操作".into());
         }
         let layout = super::runtime::Layout::existing(std::path::Path::new(&executable), port)?;
-        phase(app, "正在启动 / 重启 CPA…");
-        super::runtime::restart(&layout)?;
-        super::install::restore_connection(app, &layout)?;
-        Ok("CPA 已启动，后续由 ModelLens 独立管理".into())
+        phase(
+            app,
+            if running {
+                "$ CPA --config config.yaml · 正在启动…"
+            } else {
+                "$ SIGTERM CPA / dev · 正在关闭…"
+            },
+        );
+        super::runtime::set_running(&layout, running, expected_pid)?;
+        if running {
+            super::install::restore_connection(app, &layout)?;
+            let state = app.state::<Management>();
+            let mut s = state.0.lock().map_err(|_| "管理状态不可用")?;
+            if !s.snapshot.connected {
+                let store = super::super::local_connection::LocalFile::for_app(app)?;
+                s.restore_for_port(&store, port)
+                    .map_err(|_| "CPA 已启动，但管理连接恢复失败，请检查连接设置")?;
+            }
+            if s.snapshot.connected && s.snapshot.port == port {
+                super::super::quota_cache::restore(app, &mut s)
+                    .map_err(|_| "CPA 已启动，但额度缓存恢复失败，请手动刷新额度")?;
+            }
+            Ok("CPA 已启动".into())
+        } else {
+            let state = app.state::<Management>();
+            let mut s = state.0.lock().map_err(|_| "管理状态不可用")?;
+            if s.snapshot.port == port {
+                s.disconnect();
+                s.snapshot.error = None;
+            }
+            Ok("CPA 已关闭".into())
+        }
     })
     .await
 }
@@ -167,4 +236,26 @@ pub async fn cpa_install(
         super::install::install(app, &directory, port)
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn logs_are_ordered_bounded_and_do_not_replace_active_job_state() {
+        let mut job = Job {
+            busy: true,
+            message: "正在编译".into(),
+            revision: 0,
+            logs: vec![],
+        };
+        for i in 0..105 {
+            job.record(format!("command {i}"));
+        }
+        assert_eq!(job.logs.len(), 100);
+        assert_eq!(job.logs[0].message, "command 5");
+        assert_eq!(job.logs.last().unwrap().id, 105);
+        assert!(job.busy);
+        assert_eq!(job.message, "正在编译");
+    }
 }

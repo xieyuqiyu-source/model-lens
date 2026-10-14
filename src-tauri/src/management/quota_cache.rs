@@ -242,7 +242,10 @@ mod tests {
         ] {
             assert!(!bytes.contains(private));
         }
-        let mut restarted = session();
+        let mut restarted = original;
+        restarted.disconnect();
+        assert!(restarted.records.is_empty());
+        restarted.records = session().records;
         load(&path, &mut restarted).unwrap();
         let row = &restarted.records.values().next().unwrap().row;
         assert_eq!(row.five, Some(0.0));

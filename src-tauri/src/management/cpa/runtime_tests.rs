@@ -4,14 +4,19 @@ fn fixture() -> (tempfile::TempDir, Layout) {
     let directory = temp.path().canonicalize().unwrap().join(".dev");
     fs::create_dir(&directory).unwrap();
     let source = temp.path().join("server.rs");
-    fs::write(&source,r#"use std::{net::TcpListener,io::{Read,Write}};
-fn main(){let config=std::env::args().nth(2).unwrap();let port=std::fs::read_to_string(config).unwrap();
+    fs::write(&source, r#"use std::{net::TcpListener,io::{Read,Write},sync::atomic::{AtomicBool,Ordering},time::Duration};
+static STOP:AtomicBool=AtomicBool::new(false);
+extern "C" fn handle(_:i32){STOP.store(true,Ordering::Relaxed);}
+extern "C" {fn signal(sig:i32,handler:usize)->usize;}
+fn main(){let config=std::env::args().nth(2).unwrap();let port=std::fs::read_to_string(&config).unwrap();
+let delayed=std::path::Path::new(&config).with_file_name("delay-stop").exists();
+if delayed{unsafe{signal(15,handle as *const () as usize);}}
 let listener=TcpListener::bind(format!("127.0.0.1:{}",port.trim())).unwrap();
-for mut stream in listener.incoming().flatten(){let _=stream.read(&mut [0;1024]);let _=stream.write_all(b"HTTP/1.1 200 OK
-Content-Length: 2
-Connection: close
-
-OK");}}"#).unwrap();
+listener.set_nonblocking(true).unwrap();
+while !STOP.load(Ordering::Relaxed){
+if let Ok((mut stream,_))=listener.accept(){let _=stream.read(&mut [0;1024]);let _=stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK");}
+else{std::thread::sleep(Duration::from_millis(10));}}
+drop(listener);std::thread::sleep(Duration::from_millis(800));}"#).unwrap();
     let executable = directory.join("cli-proxy-api");
     assert!(Command::new("rustc")
         .arg(&source)
@@ -76,7 +81,7 @@ exit 1
 fn occupied_port_is_never_terminated_or_replaced() {
     let (_temp, layout) = fixture();
     let foreign = TcpListener::bind(("127.0.0.1", layout.port)).unwrap();
-    assert!(restart(&layout).is_err());
+    assert!(set_running(&layout, true, None).is_err());
     assert_eq!(foreign.local_addr().unwrap().port(), layout.port);
 }
 
@@ -112,9 +117,38 @@ while True: time.sleep(.1)
         .unwrap()
         .parse()
         .unwrap();
-    restart(&layout).unwrap();
+    let previous = owner(&layout).unwrap().unwrap();
+    set_running(&layout, false, Some(previous)).unwrap();
+    assert!(owner(&layout).unwrap().is_none());
+    set_running(&layout, true, None).unwrap();
     assert!(launcher.wait().unwrap().success());
     assert_eq!(unsafe { libc::kill(sibling, 0) }, -1);
     assert!(owner(&layout).unwrap().is_some());
     stop(&layout).unwrap();
+}
+
+#[test]
+fn explicit_start_stop_never_restarts_or_stops_a_changed_process() {
+    let (_temp, layout) = fixture();
+    set_running(&layout, true, None).unwrap();
+    let pid = owner(&layout).unwrap().unwrap();
+    assert!(set_running(&layout, true, Some(pid)).is_err());
+    assert_eq!(owner(&layout).unwrap(), Some(pid));
+    assert!(set_running(&layout, false, Some(pid + 1)).is_err());
+    assert_eq!(owner(&layout).unwrap(), Some(pid));
+    set_running(&layout, false, Some(pid)).unwrap();
+    assert!(owner(&layout).unwrap().is_none());
+    assert!(TcpListener::bind(("127.0.0.1", layout.port)).is_ok());
+}
+
+#[test]
+fn close_waits_for_exit_after_listener_is_released() {
+    let (_temp, layout) = fixture();
+    fs::write(layout.directory.join("delay-stop"), "").unwrap();
+    set_running(&layout, true, None).unwrap();
+    let pid = owner(&layout).unwrap().unwrap();
+    let started = Instant::now();
+    set_running(&layout, false, Some(pid)).unwrap();
+    assert!(started.elapsed() >= Duration::from_millis(800));
+    assert_ne!(unsafe { libc::kill(pid as i32, 0) }, 0);
 }

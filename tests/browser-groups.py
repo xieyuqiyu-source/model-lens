@@ -16,7 +16,10 @@ __TAURI_INTERNALS__.invoke=async(cmd,args)=>{
  if(['cpa_open_management','cpa_pull','quota_refresh_group'].includes(cmd)){
   __testCalls.push({cmd,args});
   await new Promise(r=>setTimeout(r,180));
-  if(window.cpaError) throw window.cpaError;
+  if(window.cpaError) {
+   if(cmd==='cpa_pull')for(const id of listeners.get('cpa-job')||[])callbacks.get(id)?.({event:'cpa-job',payload:{busy:false,message:cpaError,revision:100,logs:[{id:100,at:100,message:cpaError}]}});
+   throw window.cpaError;
+  }
   if(cmd==='cpa_pull') return 'CPA 已编译并重启 · bbbbbbb';
   if(cmd==='quota_refresh_group'){
    const group=p=>({'gemini-cli':'gemini',xai:'grok'})[p]||p;

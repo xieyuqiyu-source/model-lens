@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cpaApi, native, type CpaJob } from "./api";
 export function useCpaJob() {
-  const [job,setJob]=useState<CpaJob>({busy:false,message:"",revision:0});
+  const [job,setJob]=useState<CpaJob>({busy:false,message:"",revision:0,logs:[]});
   const [error,setError]=useState("");
   const [pending,setPending]=useState(false);
   const running=useRef(false);
@@ -30,5 +30,5 @@ export function useCpaJob() {
     catch(e){if(revision.current===started)setError(typeof e==="string"?e:"CPA 操作未完成，请重新检测");return false;}
     finally{running.current=false;setPending(false);}
   };
-  return {busy:job.busy||pending,message:job.busy?job.message:error||job.message,run};
+  return {logs:job.logs ?? [], feedback:error, busy:job.busy||pending,message:job.busy?job.message:error||job.message,run};
 }

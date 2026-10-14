@@ -40,9 +40,9 @@ export const cpaApi = {
   open: () => invoke<void>("cpa_open_management"),
   pull: () => invoke<string>("cpa_pull"),
   job: () => invoke<CpaJob>("cpa_job"),
-  start: (executable: string, port: number) => invoke<string>("cpa_start", {executable, port}),
+  setRunning: (executable: string, port: number, running: boolean, expectedPid: number | null) => invoke<string>("cpa_set_running", {executable, port, running, expectedPid}),
   install: (directory: string, port: number) => invoke<string>("cpa_install", {directory, port}),
   chooseDirectory: () => invoke<string | null>("cpa_choose_directory"),
 };
 
-export type CpaJob = {busy: boolean; message: string; revision: number};
+export type CpaJob = {busy: boolean; message: string; revision: number; logs: {id: number; at: number; message: string}[]};

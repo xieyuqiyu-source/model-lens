@@ -104,7 +104,7 @@ pub(super) fn install(app: &tauri::AppHandle, value: &str, port: u16) -> Result<
         .prefix(".modellens-cpa-install-")
         .tempdir_in(target.parent().unwrap())
         .map_err(|_| "无法写入安装目录")?;
-    jobs::phase(app, "正在从 GitHub 获取官方 CPA…");
+    jobs::phase(app, "$ git clone CLIProxyAPI · 正在获取官方源码…");
     super::git(
         staged.path(),
         &[
@@ -128,7 +128,7 @@ pub(super) fn install(app: &tauri::AppHandle, value: &str, port: u16) -> Result<
         port,
     };
     super::validate_repository(&layout.repository)?;
-    jobs::phase(app, "正在编译新安装的 CPA…");
+    jobs::phase(app, "$ go build ./cmd/server · 正在编译…");
     let binary = runtime::build(&layout)?;
     fs::rename(binary.path(), &layout.executable).map_err(|_| "无法保存 CPA 程序")?;
     let key = secret()?;
@@ -167,7 +167,7 @@ pub(super) fn install(app: &tauri::AppHandle, value: &str, port: u16) -> Result<
     }
     let _ = staged.keep();
     let layout = Layout::existing(&target.join(".dev/cli-proxy-api"), port)?;
-    jobs::phase(app, "正在启动并连接 CPA…");
+    jobs::phase(app, "$ CPA --config config.yaml · 正在启动并连接…");
     runtime::launch(&layout).map_err(|e| format!("{e}；安装文件保留在 {}", target.display()))?;
     let _ = crate::discovery::scan(data);
     restore_connection(app, &layout)?;

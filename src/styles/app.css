@@ -1015,3 +1015,23 @@ textarea:focus {
 .service-install label { display: grid; gap: 8px; }
 .service-install input { width: 100%; min-width: 0; }
 .service-install p { margin: 0; }
+
+.service-panel { display: grid; gap: 14px; min-width: 0; }
+.service-panel .service-toolbar { margin: 0; gap: 12px; }
+.service-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.service-panel .service-port, .service-panel .notice { margin: 0; }
+.service-panel .service-install { padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.service-panel .service-location { padding: 0; }
+.service-panel .service-name { padding: 14px; cursor: pointer; list-style: none; }
+.service-panel .service-name::-webkit-details-marker { display: none; }
+.service-panel details[open] .service-name > svg:last-child { transform: rotate(180deg); }
+.service-panel .service-location dl { margin: 0; padding: 0 14px 14px; }
+.service-select { display: flex; gap: 8px; align-items: center; padding: 12px 14px 0; }
+.service-log { min-width: 0; }
+.service-log-heading { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; }
+.service-log-output { min-height: 90px; max-height: 170px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--surface); font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.8; user-select: text; }
+.service-log-line { display: flex; align-items: baseline; gap: 10px; overflow-wrap: anywhere; }
+.service-log-line time { flex-shrink: 0; color: var(--muted); }
+.service-log-line span { min-width: 0; }
+.service-panel .service-location details { margin: 0; border: 0; }
+.service-panel details[open] .service-name > svg { rotate: 0deg; }

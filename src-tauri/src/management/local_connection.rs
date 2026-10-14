@@ -145,6 +145,17 @@ impl Session {
         self.snapshot.saved = true;
         Ok(())
     }
+    pub(super) fn restore_for_port(
+        &mut self,
+        store: &impl ConnectionStore,
+        port: u16,
+    ) -> Result<(), String> {
+        if let Some(connection) = store.load()?.filter(|c| c.port == port) {
+            self.snapshot.saved = true;
+            self.connect(connection)?;
+        }
+        Ok(())
+    }
     pub(super) fn restore(&mut self, store: &impl ConnectionStore) -> Result<(), String> {
         self.initialized = true;
         if let Some(connection) = store.load()? {
@@ -320,7 +331,11 @@ mod tests {
         first.disconnect();
         assert!(first.snapshot.saved && !first.snapshot.connected);
         let mut restarted = Session::default();
-        restarted.restore(&store).unwrap();
+        restarted
+            .restore_for_port(&store, if port == 65535 { port - 1 } else { port + 1 })
+            .unwrap();
+        assert!(!restarted.snapshot.connected);
+        restarted.restore_for_port(&store, port).unwrap();
         assert!(restarted.snapshot.connected && restarted.snapshot.saved);
         let snapshot = serde_json::to_string(&restarted.snapshot).unwrap();
         assert!(!snapshot.contains("synthetic-key"));

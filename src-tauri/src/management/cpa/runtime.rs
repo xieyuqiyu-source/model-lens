@@ -108,9 +108,15 @@ fn owner(layout: &Layout) -> Result<Option<u32>, String> {
     Ok(Some(pid))
 }
 fn stop(layout: &Layout) -> Result<(), String> {
+    stop_checked(layout, None)
+}
+fn stop_checked(layout: &Layout, expected: Option<u32>) -> Result<(), String> {
     let Some(pid) = owner(layout)? else {
         return Ok(());
     };
+    if expected.is_some_and(|expected| expected != pid) {
+        return Err("CPA 进程已变化，请重新检测".into());
+    }
     let parent =
         crate::discovery::command_output("/bin/ps", &["-p", &pid.to_string(), "-o", "ppid="])?
             .trim()
@@ -133,7 +139,8 @@ fn stop(layout: &Layout) -> Result<(), String> {
     }
     let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
-        let cpa_gone = !listeners(layout.port).contains(&pid);
+        let cpa_gone = unsafe { libc::kill(pid as i32, 0) } != 0
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
         let launcher_done = !supervised
             || crate::discovery::command_output("/usr/sbin/lsof", &["-t", lock.to_str().unwrap()])
                 .unwrap_or_default()
@@ -223,9 +230,23 @@ pub(super) fn launch(layout: &Layout) -> Result<(), String> {
     terminate_child(&mut child);
     Err("CPA 启动检查超时，已停止本次新进程".into())
 }
-pub(super) fn restart(layout: &Layout) -> Result<(), String> {
-    stop(layout)?;
-    launch(layout)
+pub(super) fn set_running(
+    layout: &Layout,
+    running: bool,
+    expected: Option<u32>,
+) -> Result<(), String> {
+    let current = owner(layout)?;
+    if current != expected {
+        return Err("CPA 进程已变化，请重新检测后操作".into());
+    }
+    if running {
+        if current.is_some() {
+            return Err("CPA 已在运行，未重复启动".into());
+        }
+        launch(layout)
+    } else {
+        stop_checked(layout, expected)
+    }
 }
 pub(super) fn replace_and_restart(
     layout: &Layout,
