@@ -211,7 +211,7 @@ export function Probe(p: Props) {
       )}
       <footer className="probe-foot">
         自动检测
-        <span>本机预览版 0.2.21</span>
+        <span>本机预览版 0.2.22</span>
       </footer>
     </section>
   );

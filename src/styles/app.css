@@ -1035,3 +1035,12 @@ textarea:focus {
 .service-log-line span { min-width: 0; }
 .service-panel .service-location details { margin: 0; border: 0; }
 .service-panel details[open] .service-name > svg { rotate: 0deg; }
+.cpa-versions { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.cpa-version-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 11px; }
+.cpa-version-heading > span { overflow-wrap: anywhere; }
+.cpa-version-heading button { flex-shrink: 0; font-size: 10px; }
+.cpa-version-values { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 12px 0 0; }
+.cpa-version-values dt { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.cpa-version-values dd { margin: 5px 0 0; font-family: ui-monospace, monospace; font-size: 12px; user-select: text; }
+.cpa-version-source, .cpa-update-success { margin-top: 10px; font-size: 10px; }
+.cpa-update-success { display: flex; align-items: center; gap: 5px; }

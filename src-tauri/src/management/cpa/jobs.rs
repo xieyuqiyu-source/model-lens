@@ -10,6 +10,7 @@ static JOB: Mutex<Job> = Mutex::new(Job {
     message: String::new(),
     revision: 0,
     logs: Vec::new(),
+    update: None,
 });
 #[derive(Clone, serde::Serialize)]
 pub struct Job {
@@ -17,6 +18,24 @@ pub struct Job {
     message: String,
     revision: u64,
     logs: Vec<LogEntry>,
+    update: Option<UpdateResult>,
+}
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateResult {
+    executable: String,
+    commit: String,
+    revision: u64,
+}
+pub(super) fn update_result(app: &tauri::AppHandle, result: Option<(String, String)>) {
+    if let Ok(mut job) = JOB.lock() {
+        job.revision += 1;
+        job.update = result.map(|(executable, commit)| UpdateResult {
+            executable,
+            commit,
+            revision: job.revision,
+        });
+        let _ = app.emit("cpa-job", job.clone());
+    }
 }
 #[derive(Clone, serde::Serialize)]
 struct LogEntry {
@@ -248,6 +267,7 @@ mod tests {
             message: "正在编译".into(),
             revision: 0,
             logs: vec![],
+            update: None,
         };
         for i in 0..105 {
             job.record(format!("command {i}"));

@@ -25,11 +25,15 @@ drop(listener);std::thread::sleep(Duration::from_millis(800));}"#).unwrap();
         .status()
         .unwrap()
         .success());
-    let port = TcpListener::bind(("127.0.0.1", 0))
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    // Avoid the ephemeral ports used by concurrent HTTP clients in other tests.
+    static NEXT_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(20000);
+    let port = loop {
+        let candidate = NEXT_PORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        assert!(candidate < 30000);
+        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+            break candidate;
+        }
+    };
     let config = directory.join("config.yaml");
     fs::write(&config, port.to_string()).unwrap();
     let layout = Layout {
@@ -151,4 +155,41 @@ fn close_waits_for_exit_after_listener_is_released() {
     set_running(&layout, false, Some(pid)).unwrap();
     assert!(started.elapsed() >= Duration::from_millis(800));
     assert_ne!(unsafe { libc::kill(pid as i32, 0) }, 0);
+}
+
+#[test]
+fn root_layout_build_staging_does_not_dirty_go_metadata() {
+    use crate::management::cpa::tests::{command, commit};
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("cmd/server")).unwrap();
+    fs::write(
+        repo.join("go.mod"),
+        "module example.com/cpa-test\n\ngo 1.20\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.join("cmd/server/main.go"),
+        "package main\nfunc main() {}\n",
+    )
+    .unwrap();
+    command(&repo, &["init", "-b", "main"]);
+    commit(&repo, "first");
+    let layout = Layout {
+        repository: repo.clone(),
+        directory: repo.clone(),
+        executable: repo.join("cpa"),
+        config: repo.join("config.yaml"),
+        port: 20000,
+    };
+    let staged = build(&layout).unwrap();
+    assert!(!staged.path().starts_with(&repo));
+    let output = Command::new(go().unwrap())
+        .args(["version", "-m"])
+        .arg(staged.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let metadata = String::from_utf8(output.stdout).unwrap();
+    assert!(metadata.contains("vcs.modified=false"), "{metadata}");
 }

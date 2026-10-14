@@ -40,9 +40,17 @@ export const cpaApi = {
   open: () => invoke<void>("cpa_open_management"),
   pull: () => invoke<string>("cpa_pull"),
   job: () => invoke<CpaJob>("cpa_job"),
+  versions: (executable: string) => invoke<CpaVersions>("cpa_versions", {executable}),
   setRunning: (executable: string, port: number, running: boolean, expectedPid: number | null) => invoke<string>("cpa_set_running", {executable, port, running, expectedPid}),
   install: (directory: string, port: number) => invoke<string>("cpa_install", {directory, port}),
   chooseDirectory: () => invoke<string | null>("cpa_choose_directory"),
 };
 
-export type CpaJob = {busy: boolean; message: string; revision: number; logs: {id: number; at: number; message: string}[]};
+export type CpaUpdate = {executable: string; commit: string; revision: number};
+export type CpaJob = {update?: CpaUpdate | null; busy: boolean; message: string; revision: number; logs: {id: number; at: number; message: string}[]};
+
+export type CpaVersions = {
+  source: string; local: string | null; remote: string | null; branch: string; upstream: string | null;
+  ahead: number; behind: number; dirty: boolean; status: "current" | "behind" | "ahead" | "diverged" | "unbuilt" | "modified" | "unknown";
+  remoteError: string | null; checkedAt: number;
+};

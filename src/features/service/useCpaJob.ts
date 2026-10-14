@@ -30,5 +30,5 @@ export function useCpaJob() {
     catch(e){if(revision.current===started)setError(typeof e==="string"?e:"CPA 操作未完成，请重新检测");return false;}
     finally{running.current=false;setPending(false);}
   };
-  return {logs:job.logs ?? [], feedback:error, busy:job.busy||pending,message:job.busy?job.message:error||job.message,run};
+  return {update:job.update, logs:job.logs ?? [], feedback:error, busy:job.busy||pending,message:job.busy?job.message:error||job.message,run};
 }

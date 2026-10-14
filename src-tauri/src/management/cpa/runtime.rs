@@ -57,9 +57,11 @@ pub(super) fn build(layout: &Layout) -> Result<tempfile::NamedTempFile, String> 
     build_with(layout, &go()?)
 }
 fn build_with(layout: &Layout, tool: &Path) -> Result<tempfile::NamedTempFile, String> {
+    // Keep build artifacts outside the source tree so Go's VCS metadata stays accurate.
+    let staging_directory = layout.repository.parent().ok_or("无法定位编译暂存目录")?;
     let staged = tempfile::Builder::new()
         .prefix(".cpa-build-")
-        .tempfile_in(&layout.directory)
+        .tempfile_in(staging_directory)
         .map_err(|_| "无法创建编译临时文件")?;
     let mut cmd = Command::new(tool);
     cmd.current_dir(&layout.repository)

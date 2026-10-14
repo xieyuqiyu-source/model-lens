@@ -125,6 +125,7 @@ fn main() {
             management::groups::quota_refresh_group,
             management::cpa::cpa_open_management,
             management::cpa::cpa_pull,
+            management::cpa::versions::cpa_versions,
             management::cpa::jobs::cpa_job,
             management::cpa::jobs::cpa_set_running,
             management::cpa::jobs::cpa_install,

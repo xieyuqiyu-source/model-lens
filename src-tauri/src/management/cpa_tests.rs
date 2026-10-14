@@ -1,5 +1,5 @@
 use super::*;
-fn command(path: &Path, args: &[&str]) {
+pub(super) fn command(path: &Path, args: &[&str]) {
     assert!(Command::new("/usr/bin/git")
         .current_dir(path)
         .args(args)
@@ -13,7 +13,7 @@ fn command(path: &Path, args: &[&str]) {
         .unwrap()
         .success());
 }
-fn commit(path: &Path, name: &str) {
+pub(super) fn commit(path: &Path, name: &str) {
     fs::write(path.join(name), name).unwrap();
     command(path, &["add", "."]);
     command(path, &["commit", "-m", name]);

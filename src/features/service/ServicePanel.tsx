@@ -3,6 +3,7 @@ import { cpaApi } from "./api";
 import { useCpaJob } from "./useCpaJob";
 import { Folder, RefreshCw, Power, Download, ChevronDown } from "lucide-react";
 import { Modal } from "../../components/Common";
+import { CpaVersions } from "./CpaVersions";
 import { CommandLog } from "./CommandLog";
 import type { ServiceState } from "./useServices";
 
@@ -87,6 +88,7 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
             </article>
           ))}
         </div>}
+        {chosen && <CpaVersions executable={chosen.executable} busy={job.busy} update={job.update} />}
         <CommandLog logs={job.logs} feedback={job.feedback} busy={job.busy} />
       </div>
     </Modal>

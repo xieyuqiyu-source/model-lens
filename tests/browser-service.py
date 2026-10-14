@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright, expect
 url=os.environ.get('MODEL_LENS_TEST_URL','http://127.0.0.1:1422')
 fixture=Path(__file__).parent/'fixtures/credentials-ipc.js'
 setup=r"""
+window.versions={source:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',local:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',remote:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',branch:'main',upstream:'origin/main',ahead:0,behind:0,dirty:false,status:'current',remoteError:null,checkedAt:100};
 window.service={services:[{executable:'/synthetic/CLIProxy/.dev/cpa',directory:'/synthetic/CLIProxy',workingDirectory:'/synthetic/CLIProxy/.dev',lastSeen:1,pid:123}],checkedAt:1,statusKnown:true,warning:null};
 window.job={busy:false,message:'',revision:0,logs:[]};
 window.emit=(event,payload)=>{for(const id of listeners.get(event)||[])callbacks.get(id)?.({event,payload:structuredClone(payload)});};
@@ -14,6 +15,7 @@ const originalInvoke=__TAURI_INTERNALS__.invoke;
 __TAURI_INTERNALS__.invoke=async(cmd,args)=>{
  if(cmd==='discover_services'){__testCalls.push({cmd,args});return structuredClone(service);}
  if(cmd==='cpa_job')return structuredClone(job);
+ if(cmd==='cpa_versions'){__testCalls.push({cmd,args});return structuredClone(versions);}
  if(cmd==='cpa_choose_directory')return '/synthetic/selected/CLIProxy';
  if(cmd==='cpa_set_running'||cmd==='cpa_install'){
   __testCalls.push({cmd,args});
@@ -34,6 +36,22 @@ with sync_playwright() as p:
   page.goto(url)
   page.locator('.service-status').click()
   dialog=page.get_by_role('dialog',name='本机 CLIProxy')
+  version_panel=dialog.get_by_role('region',name='CPA 版本')
+  expect(version_panel.get_by_text('已同步到最新',exact=True)).to_be_visible()
+  expect(version_panel.get_by_text('aaaaaaaa',exact=True)).to_have_count(2)
+  page.evaluate("versions.status='unbuilt';versions.local='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'")
+  version_panel.get_by_role('button',name='检查 CPA 版本').click()
+  expect(version_panel.get_by_text('源码已同步，程序尚未更新',exact=True)).to_be_visible()
+  page.evaluate("versions.status='unknown';versions.remoteError='远端检查失败，当前显示上次已知版本'")
+  version_panel.get_by_role('button',name='检查 CPA 版本').click()
+  expect(version_panel.get_by_text('远端检查失败，当前显示上次已知版本',exact=True)).to_be_visible()
+  expect(version_panel.get_by_text('已同步到最新',exact=True)).to_have_count(0)
+  page.evaluate("versions.status='behind';versions.behind=2;versions.remoteError=null")
+  version_panel.get_by_role('button',name='检查 CPA 版本').click()
+  expect(version_panel.get_by_text('有更新 · 落后 2 个提交',exact=True)).to_be_visible()
+  page.evaluate("versions.status='current';versions.behind=0;versions.local=versions.remote;job={...job,busy:false,revision:job.revision+1,update:{executable:service.services[0].executable,commit:versions.remote,revision:1}};emit('cpa-job',job)")
+  expect(version_panel.get_by_text('已同步到最新',exact=True)).to_be_visible()
+  expect(version_panel.get_by_text('上次更新成功 · aaaaaaaa，已编译并重启',exact=True)).to_be_visible()
   restart=dialog.get_by_role('button',name='关闭 CPA',exact=True)
   detect=dialog.get_by_role('button',name='重新检测',exact=True)
   expect(restart).to_be_enabled()

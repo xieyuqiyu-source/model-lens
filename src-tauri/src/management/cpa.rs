@@ -2,6 +2,7 @@ mod install;
 pub mod jobs;
 mod process;
 mod runtime;
+pub mod versions;
 use super::Management;
 use std::{
     fs,
@@ -180,13 +181,27 @@ pub async fn cpa_pull(app: tauri::AppHandle) -> Result<String, String> {
     jobs::run(app, move |app| {
         let executable = crate::discovery::connected_executable(port)?;
         let layout = runtime::Layout::existing(&executable, port)?;
+        let _repository = versions::REPOSITORY_ACCESS
+            .lock()
+            .map_err(|_| "CPA 仓库状态不可用")?;
+        jobs::update_result(app, None);
         jobs::phase(app, "$ git fetch → merge --ff-only · 正在获取更新…");
         let result = pull(&layout.repository)?;
         jobs::phase(app, "$ go build ./cmd/server · 正在编译，原服务继续运行…");
         let staged = runtime::build(&layout)?;
         jobs::phase(app, "$ SIGTERM → CPA --config config.yaml · 正在更新重启…");
         runtime::replace_and_restart(&layout, staged)?;
-        Ok(format!("CPA 已编译并重启 · {}", &result.after[..7]))
+        jobs::update_result(
+            app,
+            Some((
+                executable.to_string_lossy().into_owned(),
+                result.after.clone(),
+            )),
+        );
+        Ok(format!(
+            "CPA 更新成功 · {}（已编译并重启）",
+            &result.after[..7]
+        ))
     })
     .await
 }
