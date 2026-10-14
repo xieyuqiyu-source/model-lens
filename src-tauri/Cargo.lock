@@ -2070,9 +2070,11 @@ dependencies = [
 
 [[package]]
 name = "model-lens"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "libc",
+ "objc2",
+ "objc2-app-kit",
  "reqwest",
  "serde",
  "serde_json",

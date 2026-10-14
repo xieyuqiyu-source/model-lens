@@ -182,6 +182,9 @@ async fn run<T: Send + 'static>(
         let state = app.state::<Management>();
         // Catalog reads from both windows queue; paid sampling never retries or queues.
         let mut session = lock_session(&state, wait)?;
+        if session.snapshot.busy {
+            return Err("服务操作正在进行，请稍后重试".into());
+        }
         session.snapshot.busy = true;
         session.publish(&app);
         let result = f(&mut session);

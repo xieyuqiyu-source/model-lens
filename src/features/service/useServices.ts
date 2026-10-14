@@ -14,7 +14,9 @@ export function useServices() {
     setBusy(true);
     setError("");
     try {
-      setSnapshot(await discoverServices());
+      const next=await discoverServices();
+      setSnapshot(next);
+      return next;
     } catch (e) {
       setError(typeof e === "string" ? e : "检查未完成，请重试");
     } finally {

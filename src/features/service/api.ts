@@ -38,5 +38,11 @@ export async function closeTray() {
 
 export const cpaApi = {
   open: () => invoke<void>("cpa_open_management"),
-  pull: () => invoke<{directory: string; before: string; after: string; updated: boolean}>("cpa_pull"),
+  pull: () => invoke<string>("cpa_pull"),
+  job: () => invoke<CpaJob>("cpa_job"),
+  start: (executable: string, port: number) => invoke<string>("cpa_start", {executable, port}),
+  install: (directory: string, port: number) => invoke<string>("cpa_install", {directory, port}),
+  chooseDirectory: () => invoke<string | null>("cpa_choose_directory"),
 };
+
+export type CpaJob = {busy: boolean; message: string; revision: number};

@@ -305,6 +305,9 @@ async fn operate(
             .0
             .try_lock()
             .map_err(|_| "另一项操作正在进行，请稍后重试")?;
+        if session.snapshot.busy {
+            return Err("服务操作正在进行，请稍后重试".into());
+        }
         session.snapshot.busy = true;
         session.snapshot.error = None;
         session.publish(&app);

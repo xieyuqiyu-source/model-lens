@@ -225,7 +225,7 @@ export default function App() {
         />
       )}
       {modal === "service" && (
-        <ServicePanel state={services} onClose={() => setModal("")} />
+        <ServicePanel state={services} port={credentials.port} onClose={() => setModal("")} />
       )}
       {modal === "import" && <ImportDialog state={credentials} onClose={() => setModal("")} />}
       {modal === "history" && (

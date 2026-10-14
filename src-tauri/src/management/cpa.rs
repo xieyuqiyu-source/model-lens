@@ -1,22 +1,16 @@
+mod install;
+pub mod jobs;
+mod process;
+mod runtime;
 use super::Management;
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::atomic::{AtomicBool, Ordering},
-    thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tauri::Manager;
 
-static PULLING: AtomicBool = AtomicBool::new(false);
-struct PullGuard;
-impl Drop for PullGuard {
-    fn drop(&mut self) {
-        PULLING.store(false, Ordering::Release);
-    }
-}
 #[derive(serde::Serialize)]
 pub struct PullResult {
     directory: String,
@@ -83,41 +77,9 @@ fn git(path: &Path, args: &[&str], timeout: Duration) -> Result<String, String> 
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .process_group(0);
-    let mut child = command
-        .spawn()
-        .map_err(|_| "无法启动 Git，请检查命令行工具")?;
-    let stdout = child.stdout.take().ok_or("无法读取 Git 状态")?;
-    let reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout
-            .take(1024 * 1024)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Ok(status),
-            Ok(None) if start.elapsed() < timeout => thread::sleep(Duration::from_millis(50)),
-            _ => {
-                unsafe {
-                    libc::kill(-(child.id() as i32), libc::SIGKILL);
-                }
-                let _ = child.wait();
-                break Err("Git 操作超时或中断，请核实仓库状态后重试");
-            }
-        }
-    };
-    let output = reader
-        .join()
-        .map_err(|_| "Git 输出读取失败")?
-        .map_err(|_| "Git 输出读取失败")?;
-    if !status?.success() {
-        // Raw Git diagnostics can include remote credentials; keep them out of the UI.
-        return Err("Git 操作失败：请检查网络、仓库权限和分支状态".into());
-    }
-    String::from_utf8(output).map_err(|_| "Git 返回无效状态".into())
+    process::output(command, timeout)
 }
+
 fn local_git(path: &Path, args: &[&str]) -> Result<String, String> {
     git(path, args, Duration::from_secs(5)).map(|s| s.trim().to_owned())
 }
@@ -213,23 +175,20 @@ fn pull(path: &Path) -> Result<PullResult, String> {
     })
 }
 #[tauri::command]
-pub async fn cpa_pull(app: tauri::AppHandle) -> Result<PullResult, String> {
+pub async fn cpa_pull(app: tauri::AppHandle) -> Result<String, String> {
     let port = connected_port(&app)?;
-    if PULLING.swap(true, Ordering::AcqRel) {
-        return Err("CPA 更新正在进行".into());
-    }
-    let guard = PullGuard;
-    tauri::async_runtime::spawn_blocking(move || {
-        let _guard = guard;
+    jobs::run(app, move |app| {
         let executable = crate::discovery::connected_executable(port)?;
-        let path = repository(&executable)?;
-        if connected_port(&app)? != port {
-            return Err("CPA 连接已变化，请重试".into());
-        }
-        pull(&path)
+        let layout = runtime::Layout::existing(&executable, port)?;
+        jobs::phase(app, "正在获取 CPA 更新…");
+        let result = pull(&layout.repository)?;
+        jobs::phase(app, "正在编译 CPA，原服务继续运行…");
+        let staged = runtime::build(&layout)?;
+        jobs::phase(app, "正在重启 CPA…");
+        runtime::replace_and_restart(&layout, staged)?;
+        Ok(format!("CPA 已编译并重启 · {}", &result.after[..7]))
     })
     .await
-    .map_err(|_| "CPA 拉取任务未完成".to_owned())?
 }
 #[cfg(test)]
 #[path = "cpa_tests.rs"]

@@ -17,7 +17,7 @@ __TAURI_INTERNALS__.invoke=async(cmd,args)=>{
   __testCalls.push({cmd,args});
   await new Promise(r=>setTimeout(r,180));
   if(window.cpaError) throw window.cpaError;
-  if(cmd==='cpa_pull') return {updated:!window.noUpdate,before:'aaaaaaa',after:'bbbbbbb',directory:'/synthetic/CLIProxyApi'};
+  if(cmd==='cpa_pull') return 'CPA 已编译并重启 · bbbbbbb';
   if(cmd==='quota_refresh_group'){
    const group=p=>({'gemini-cli':'gemini',xai:'grok'})[p]||p;
    for(const c of __testSnapshot.credentials.filter(c=>group(c.provider)===args.group)){c.five=42;c.quotaAt=100;}
@@ -69,11 +69,11 @@ with sync_playwright() as p:
   expect(page.locator('.credential-card')).to_have_count(1)
   page.get_by_role('button',name='CPA 管理',exact=True).click()
   page.wait_for_function("__testCalls.some(c=>c.cmd==='cpa_open_management')")
-  update=page.get_by_role('button',name='拉取更新',exact=True)
+  update=page.get_by_role('button',name='更新并重启',exact=True)
   expect(update).to_be_enabled();update.click()
-  expect(page.get_by_text('源码已更新至 bbbbbbb，尚未编译或重启',exact=True)).to_be_visible()
+  expect(page.get_by_text('CPA 已编译并重启 · bbbbbbb',exact=True)).to_be_visible()
   page.evaluate('noUpdate=true');update.click()
-  expect(page.get_by_text('没有可快进的新提交',exact=True)).to_be_visible()
+  expect(page.get_by_text('CPA 已编译并重启 · bbbbbbb',exact=True)).to_be_visible()
   page.evaluate("cpaError='CPA 仓库有未提交改动，请先处理；未拉取更新'");update.click()
   expect(page.get_by_text('CPA 仓库有未提交改动，请先处理；未拉取更新',exact=True)).to_be_visible()
   # Tabs remain scrollable at narrower widths and after the final member disappears.

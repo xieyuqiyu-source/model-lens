@@ -1023,3 +1023,11 @@ textarea:focus {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 :where([tabindex]):not(.select-menu) { transition: box-shadow var(--motion-fast); }
+
+.service-toolbar { flex-wrap: wrap; gap: 8px; }
+.service-port { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.service-port input { width: 90px; }
+.service-install { display: grid; gap: 10px; padding: 14px 0; }
+.service-install label { display: grid; gap: 8px; }
+.service-install input { width: 100%; min-width: 0; }
+.service-install p { margin: 0; }

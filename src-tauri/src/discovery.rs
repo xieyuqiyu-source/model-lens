@@ -61,7 +61,7 @@ pub fn parse_process(line: &str) -> Option<(u32, String)> {
         });
     (known || dev_cpa).then(|| (pid, path.to_owned()))
 }
-fn command_output(program: &str, args: &[&str]) -> Result<String, String> {
+pub(crate) fn command_output(program: &str, args: &[&str]) -> Result<String, String> {
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
@@ -101,7 +101,7 @@ fn command_output(program: &str, args: &[&str]) -> Result<String, String> {
     }
     String::from_utf8(bytes).map_err(|_| "系统返回了无法识别的路径".into())
 }
-fn working_directory(pid: u32) -> Option<String> {
+pub(crate) fn working_directory(pid: u32) -> Option<String> {
     let output = command_output(
         "/usr/sbin/lsof",
         &["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"],
@@ -194,6 +194,22 @@ fn merge(remembered: Vec<Remembered>, live: &[(u32, Remembered)]) -> Vec<Service
     }
     services
 }
+pub(crate) fn remember_install(data: &Path, executable: &Path) -> Result<(), String> {
+    let path = data.join("discovery.json");
+    let mut records = read_cache(&path)?;
+    let executable = executable.to_string_lossy().into_owned();
+    if !records.iter().any(|r| r.executable == executable) {
+        records.push(Remembered {
+            directory: project_directory(&executable),
+            working_directory: Path::new(&executable)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned()),
+            executable,
+            last_seen: now(),
+        });
+    }
+    save_cache(&path, &records)
+}
 pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
     if !cfg!(target_os = "macos") {
         return Err("第一阶段仅支持 macOS 的进程发现".into());
@@ -269,6 +285,37 @@ mod tests {
             working_directory: None,
             last_seen: 1,
         }
+    }
+    #[test]
+    fn installation_is_remembered_before_first_start_and_preserves_existing_locations() {
+        let temp = tempfile::tempdir().unwrap();
+        remember_install(
+            temp.path(),
+            Path::new("/synthetic/first/.dev/cli-proxy-api"),
+        )
+        .unwrap();
+        remember_install(
+            temp.path(),
+            Path::new("/synthetic/second/.dev/cli-proxy-api"),
+        )
+        .unwrap();
+        remember_install(
+            temp.path(),
+            Path::new("/synthetic/second/.dev/cli-proxy-api"),
+        )
+        .unwrap();
+        let records = read_cache(&temp.path().join("discovery.json")).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1].directory, "/synthetic/second");
+        assert!(merge(records, &[]).iter().all(|s| s.pid.is_none()));
+        fs::write(temp.path().join("discovery.json"), b"broken").unwrap();
+        assert!(
+            remember_install(temp.path(), Path::new("/synthetic/new/.dev/cli-proxy-api")).is_err()
+        );
+        assert_eq!(
+            fs::read(temp.path().join("discovery.json")).unwrap(),
+            b"broken"
+        );
     }
     #[test]
     fn recognizes_only_supported_executables() {
