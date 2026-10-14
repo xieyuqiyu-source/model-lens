@@ -508,22 +508,6 @@ details p {
   color: var(--muted);
   margin-top: 7px;
 }
-.card-meta {
-  border-top: 1px solid var(--line);
-  display: grid;
-  grid-template-columns: 1fr 1.1fr;
-  margin-top: 18px;
-  padding-top: 12px;
-  gap: 8px;
-}
-.card-meta span {
-  font-size: 10px;
-  color: var(--muted);
-}
-.card-meta p {
-  margin-top: 7px;
-  font-size: 11px;
-}
 .credential-card footer {
   display: flex;
   justify-content: space-between;

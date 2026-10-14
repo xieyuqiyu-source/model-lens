@@ -73,23 +73,6 @@ export function CredentialCard({ c, state: s, accountProbe, preview, onDelete, s
                 {credentialQuotas(c).map((q, index) => (
                   <Quota key={`${q.label}:${index}`} label={q.label} value={q.remaining} reset={q.reset} detail={q.detail} period={q.period} />
                 ))}
-                <div className="card-meta">
-                  <div>
-                    <span>厂商</span>
-                    <p>{c.provider || "未知"}</p>
-                  </div>
-                  <div>
-                    <span>额度更新</span>
-                    <p>
-                      {c.quotaAt
-                        ? new Date(c.quotaAt * 1000).toLocaleString(
-                            "zh-CN",
-                            { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" },
-                          )
-                        : "尚未查询"}
-                    </p>
-                  </div>
-                </div>
                 {(c.quotaError || !c.supported) && <p className={`quota-message ${c.quotaError ? "has-error" : ""}`}>
                   {c.quotaError ? `${c.quotaError}${c.quotaAt ? "（仍显示上次数据）" : ""}` : "此凭证类型暂不支持额度查询"}
                 </p>}
