@@ -35,3 +35,8 @@ export async function openTray() {
 export async function closeTray() {
   if (native) await invoke("close_tray");
 }
+
+export const cpaApi = {
+  open: () => invoke<void>("cpa_open_management"),
+  pull: () => invoke<{directory: string; before: string; after: string; updated: boolean}>("cpa_pull"),
+};

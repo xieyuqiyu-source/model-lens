@@ -1,5 +1,7 @@
 pub mod access;
 pub mod batch;
+pub mod cpa;
+pub mod groups;
 mod local_connection;
 mod mutations;
 pub mod probe;
@@ -420,8 +422,15 @@ pub async fn credential_delete(
 impl Session {
     fn refresh_quotas(&mut self, app: &tauri::AppHandle, id: Option<String>) -> Result<(), String> {
         self.reload()?;
+        self.refresh_quota_targets(app, self.quota_targets(id))
+    }
+    fn refresh_quota_targets(
+        &mut self,
+        app: &tauri::AppHandle,
+        targets: Vec<String>,
+    ) -> Result<(), String> {
         let mut failed = 0;
-        for id in self.quota_targets(id) {
+        for id in targets {
             if self.quota(&id).is_err() {
                 failed += 1;
             }

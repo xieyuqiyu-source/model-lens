@@ -1,5 +1,5 @@
 import "./credentials.css";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   ArrowUpRight,
   PanelTop,
@@ -18,6 +18,8 @@ import { CredentialCard } from "./CredentialCard";
 import { CredentialTools } from "./CredentialTools";
 import { BatchDeleteDialog } from "./BatchDeleteDialog";
 import { DeleteDialog } from "./DeleteDialog";
+import { GroupTabs } from "./GroupTabs";
+import { inGroup } from "./groups";
 type Props = {
   accountProbe: AccountProbeState;
   state: CredentialsState;
@@ -105,6 +107,15 @@ export function CredentialRows({
 export function Credentials(p: Props) {
   const s = p.state;
   const [selected, setSelected] = useState<string[]>([]);
+  const [group, setGroup] = useState(() => { try { return localStorage.getItem("credential-group") || "all"; } catch { return "all"; } });
+  const currentGroup = group === "all" || inGroup(s.credentials, group).length ? group : "all";
+  const visible = inGroup(s.credentials, currentGroup);
+  useEffect(() => { setSelected([]); }, [currentGroup, s.port, s.connected]);
+  const changeGroup = (id: string) => {
+    setSelected([]); setGroup(id);
+    try { localStorage.setItem("credential-group", id); } catch { /* Optional preference. */ }
+  };
+
   const [batchDeleting, setBatchDeleting] = useState<Credential[] | null>(null);
   const [deleting, setDeleting] = useState<Credential | null>(null);
   return (
@@ -147,10 +158,10 @@ export function Credentials(p: Props) {
               <button
                 className="button"
                 disabled={!s.connected || s.busy || s.stale}
-                onClick={() => void s.refreshQuota()}
+                onClick={() => void (currentGroup === "all" ? s.refreshQuota() : s.refreshGroupQuota(currentGroup))}
               >
                 <RefreshCw size={13} className={s.busy ? "spin" : ""} />
-                {s.busy ? "处理中…" : "刷新全部额度"}
+                {s.busy ? "处理中…" : currentGroup === "all" ? "刷新全部额度" : "刷新本组额度"}
               </button>
               <button className="button" disabled={!s.connected || s.busy || s.stale} onClick={p.onImport}>
                 导入 JSON
@@ -164,7 +175,7 @@ export function Credentials(p: Props) {
           )}
         </div>
       </header>
-      {p.expanded && <CredentialTools state={s} selected={selected} onSelect={setSelected} onDelete={setBatchDeleting} />}
+      {p.expanded && <CredentialTools state={s} rows={visible} groups={<GroupTabs rows={s.credentials} value={currentGroup} onChange={changeGroup} />} selected={selected} onSelect={setSelected} onDelete={setBatchDeleting} />}
       {s.error && (
         <p className="notice credentials-notice" role="alert">
           {s.error}
@@ -174,7 +185,7 @@ export function Credentials(p: Props) {
       {p.expanded && s.credentials.length ? (
         <>
           <div className="credential-grid">
-            {s.credentials.map((c) => (
+            {visible.map((c) => (
               <CredentialCard key={c.id} c={c} state={s} accountProbe={p.accountProbe} preview={p.preview} onDelete={setDeleting} selected={selected.includes(c.id)} onSelect={() => setSelected(ids => ids.includes(c.id) ? ids.filter(id => id !== c.id) : [...ids, c.id])} />
             ))}
           </div>

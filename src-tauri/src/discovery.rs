@@ -113,6 +113,24 @@ fn working_directory(pid: u32) -> Option<String> {
             .map(str::to_owned)
     })
 }
+pub fn connected_executable(port: u16) -> Result<PathBuf, String> {
+    let listeners = command_output(
+        "/usr/sbin/lsof",
+        &["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-Fp"],
+    )
+    .map_err(|_| "未找到当前端口的 CPA 进程")?;
+    let uid = unsafe { libc::geteuid() }.to_string();
+    let processes = command_output("/bin/ps", &["-U", &uid, "-o", "pid=,comm="])?;
+    let matches: Vec<_> = processes
+        .lines()
+        .filter_map(parse_process)
+        .filter(|(pid, _)| listeners.lines().any(|line| line == format!("p{pid}")))
+        .collect();
+    if matches.len() != 1 {
+        return Err("无法唯一确认当前连接对应的 CPA 进程".into());
+    }
+    Ok(PathBuf::from(&matches[0].1))
+}
 fn project_directory(executable: &str) -> String {
     let parent = Path::new(executable).parent().unwrap_or(Path::new("/"));
     // DevDock development builds commonly live in a project's .dev directory.

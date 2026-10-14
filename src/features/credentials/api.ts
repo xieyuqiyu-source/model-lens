@@ -19,6 +19,7 @@ export const managementApi = {
     invoke<ManagementSnapshot>("credentials_toggle", { targets, enabled }),
   deleteMany: (targets: CredentialTarget[]) =>
     invoke<ManagementSnapshot>("credentials_delete", { targets }),
+  quotaGroup: (group: string) => invoke<ManagementSnapshot>("quota_refresh_group", { group }),
   quota: (id: string | null = null) =>
     invoke<ManagementSnapshot>("quota_refresh", { id }),
 };

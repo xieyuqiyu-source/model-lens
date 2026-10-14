@@ -85,6 +85,7 @@ export function useCredentials() {
     refresh: () => run(managementApi.list),
     refreshQuota: (id: string | null = null) =>
       run(() => managementApi.quota(id)),
+    refreshGroupQuota: (group: string) => run(() => managementApi.quotaGroup(group)),
     importCredential: (name: string, contents: string) =>
       run(() => managementApi.importCredential(name, contents)),
     deleteCredential: (row: Credential) =>
