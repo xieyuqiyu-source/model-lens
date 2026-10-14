@@ -38,7 +38,7 @@ export async function closeTray() {
 
 export const cpaApi = {
   open: () => invoke<void>("cpa_open_management"),
-  pull: () => invoke<string>("cpa_pull"),
+  pull: (expectedExecutable?: string) => invoke<string>("cpa_pull", {expectedExecutable}),
   job: () => invoke<CpaJob>("cpa_job"),
   versions: (executable: string) => invoke<CpaVersions>("cpa_versions", {executable}),
   setRunning: (executable: string, port: number, running: boolean, expectedPid: number | null) => invoke<string>("cpa_set_running", {executable, port, running, expectedPid}),

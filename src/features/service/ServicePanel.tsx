@@ -88,7 +88,10 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
             </article>
           ))}
         </div>}
-        {chosen && <CpaVersions executable={chosen.executable} busy={job.busy} update={job.update} />}
+        {chosen && <CpaVersions executable={chosen.executable} busy={job.busy} update={job.update}
+          updateDisabled={blocked || !running} onUpdate={() => {
+            setNotice(""); void job.run(() => cpaApi.pull(chosen.executable));
+          }} />}
         <CommandLog logs={job.logs} feedback={job.feedback} busy={job.busy} />
       </div>
     </Modal>

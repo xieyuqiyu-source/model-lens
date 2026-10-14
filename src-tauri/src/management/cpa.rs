@@ -176,10 +176,19 @@ fn pull(path: &Path) -> Result<PullResult, String> {
     })
 }
 #[tauri::command]
-pub async fn cpa_pull(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn cpa_pull(
+    app: tauri::AppHandle,
+    expected_executable: Option<String>,
+) -> Result<String, String> {
     let port = connected_port(&app)?;
     jobs::run(app, move |app| {
         let executable = crate::discovery::connected_executable(port)?;
+        if expected_executable
+            .as_deref()
+            .is_some_and(|expected| Path::new(expected) != executable)
+        {
+            return Err("所选 CPA 与当前连接不一致，请连接所选服务后再更新".into());
+        }
         let layout = runtime::Layout::existing(&executable, port)?;
         let _repository = versions::REPOSITORY_ACCESS
             .lock()

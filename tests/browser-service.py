@@ -17,11 +17,11 @@ __TAURI_INTERNALS__.invoke=async(cmd,args)=>{
  if(cmd==='cpa_job')return structuredClone(job);
  if(cmd==='cpa_versions'){__testCalls.push({cmd,args});return structuredClone(versions);}
  if(cmd==='cpa_choose_directory')return '/synthetic/selected/CLIProxy';
- if(cmd==='cpa_set_running'||cmd==='cpa_install'){
+ if(cmd==='cpa_pull'||cmd==='cpa_set_running'||cmd==='cpa_install'){
   __testCalls.push({cmd,args});
   if(cmd==='cpa_install'&&service.services.length)throw '已发现 CLIProxy 进程或安装目录，请选择已有服务启动；未重复安装';
   if(cmd==='cpa_set_running')window.nextRunning=args.running;
-  report(true,cmd==='cpa_install'?'正在编译新安装的 CPA…':args.running?'正在启动 CPA…':'正在关闭 CPA…');
+  report(true,cmd==='cpa_pull'?'正在编译 CPA…':cmd==='cpa_install'?'正在编译新安装的 CPA…':args.running?'正在启动 CPA…':'正在关闭 CPA…');
   return new Promise(resolve=>{window.resolveJob=resolve;});
  }
  return originalInvoke(cmd,args);
@@ -49,6 +49,17 @@ with sync_playwright() as p:
   page.evaluate("versions.status='behind';versions.behind=2;versions.remoteError=null")
   version_panel.get_by_role('button',name='检查 CPA 版本').click()
   expect(version_panel.get_by_text('有更新 · 落后 2 个提交',exact=True)).to_be_visible()
+  update_button=version_panel.get_by_role('button',name='更新并重启',exact=True)
+  update_button.click()
+  expect(update_button).to_be_disabled()
+  expect(version_panel.get_by_role('button',name='检查 CPA 版本')).to_be_disabled()
+  expect(dialog.get_by_role('button',name='关闭 CPA',exact=True)).to_be_disabled()
+  assert page.evaluate("__testCalls.filter(c=>c.cmd==='cpa_pull').at(-1).args.expectedExecutable===service.services[0].executable")
+  dialog.get_by_role('button',name='关闭',exact=True).click()
+  page.locator('.service-status').click()
+  expect(version_panel.get_by_role('button',name='更新并重启',exact=True)).to_be_disabled()
+  expect(dialog.get_by_role('log')).to_contain_text('正在编译 CPA…')
+  page.evaluate("finish('CPA 更新成功 · aaaaaaa（已编译并重启）')")
   page.evaluate("versions.status='current';versions.behind=0;versions.local=versions.remote;job={...job,busy:false,revision:job.revision+1,update:{executable:service.services[0].executable,commit:versions.remote,revision:1}};emit('cpa-job',job)")
   expect(version_panel.get_by_text('已同步到最新',exact=True)).to_be_visible()
   expect(version_panel.get_by_text('上次更新成功 · aaaaaaaa，已编译并重启',exact=True)).to_be_visible()
@@ -80,7 +91,9 @@ with sync_playwright() as p:
   assert page.evaluate("__testCalls.find(c=>c.cmd==='cpa_set_running').args.running===false && __testCalls.find(c=>c.cmd==='cpa_set_running').args.expectedPid===123")
   page.evaluate("finish('CPA 已关闭')")
   start=dialog.get_by_role('button',name='启动 CPA',exact=True)
-  expect(start).to_be_enabled();start.click()
+  expect(start).to_be_enabled()
+  expect(version_panel.get_by_role('button',name='更新并重启',exact=True)).to_be_disabled()
+  start.click()
   assert page.evaluate("__testCalls.filter(c=>c.cmd==='cpa_set_running').at(-1).args.running===true && __testCalls.filter(c=>c.cmd==='cpa_set_running').at(-1).args.expectedPid===null")
   page.evaluate("finish('CPA 已启动')")
   expect(dialog.get_by_role('button',name='关闭 CPA',exact=True)).to_be_enabled()

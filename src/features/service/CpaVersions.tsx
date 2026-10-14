@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, Check } from "lucide-react";
+import { RefreshCw, Check, Download } from "lucide-react";
 import { cpaApi, type CpaUpdate, type CpaVersions as Versions } from "./api";
 
-export function CpaVersions({ executable, busy, update }: { executable: string; busy: boolean; update?: CpaUpdate | null }) {
+export function CpaVersions({ executable, busy, update, updateDisabled, onUpdate }: { executable: string; busy: boolean; update?: CpaUpdate | null; updateDisabled: boolean; onUpdate: () => void }) {
   const [result, setResult] = useState<{ executable: string; data: Versions }>();
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
@@ -39,9 +39,14 @@ export function CpaVersions({ executable, busy, update }: { executable: string; 
   return <section className="cpa-versions" aria-label="CPA 版本">
     <div className="cpa-version-heading">
       <span className={current ? "success" : "muted"} role="status">{message}</span>
+      <div className="cpa-version-actions">
       <button className="text-button" disabled={checking || busy} onClick={() => void refresh()} aria-label="检查 CPA 版本">
         <RefreshCw size={12} className={checking ? "spin" : ""} />检查更新
       </button>
+      <button className="text-button" disabled={checking || busy || updateDisabled} onClick={onUpdate} title="拉取、编译并重启所选 CPA，会中断当前请求">
+        <Download size={12} />更新并重启
+      </button>
+      </div>
     </div>
     <dl className="cpa-version-values">
       <div><dt>本地版本</dt><dd title={data?.local || undefined}>{data?.local?.slice(0, 8) || "未识别"}</dd></div>
