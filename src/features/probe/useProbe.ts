@@ -23,13 +23,29 @@ export function useProbe(credentials: ManagementSnapshot) {
       return "";
     }
   });
+  const [source, setSourceState] = useState(() => {
+    try {
+      return localStorage.getItem("probeSource") === "external" ? "external" : "cliproxy";
+    } catch {
+      return "cliproxy";
+    }
+  });
+  const external = source === "external";
+  const [externalApi, setExternalApi] = useState({ saved: false, baseUrl: "" });
+  useEffect(() => {
+    if (native) void probeApi.externalStatus().then(setExternalApi, () => {});
+  }, []);
   useEffect(() => {
     const sync = (event: StorageEvent) => {
       if (event.key === "model") setModelId(event.newValue ?? "");
+      // Keep main window and tray on the same source and saved endpoint.
+      if (event.key === "probeSource") setSourceState(event.newValue === "external" ? "external" : "cliproxy");
+      if (event.key === "externalApi") void probeApi.externalStatus().then(setExternalApi, () => {});
     };
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
   }, []);
+  const ready = external ? externalApi.saved : credentials.connected && !credentials.busy && !credentials.stale;
   const model = models.find((m) => m.id === modelId) ?? models[0];
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogError, setCatalogError] = useState("");
@@ -56,17 +72,17 @@ export function useProbe(credentials: ManagementSnapshot) {
     let cancelled = false;
     setModels([]);
     setCatalogError("");
-    if (!native || !credentials.connected) {
+    if (!native || (external ? !externalApi.saved : !credentials.connected)) {
       setCatalogBusy(false);
       return;
     }
     setCatalogBusy(true);
-    void probeApi.models(id)
+    void (external ? probeApi.externalModels() : probeApi.models(id))
       .then((rows) => {
         if (!cancelled) {
           setModels(rows);
           if (!rows.length)
-            setCatalogError("CLIProxy 未返回可用模型");
+            setCatalogError(external ? "第三方 API 未返回可用模型" : "CLIProxy 未返回可用模型");
         }
       })
       .catch((e) => {
@@ -79,18 +95,11 @@ export function useProbe(credentials: ManagementSnapshot) {
     return () => {
       cancelled = true;
     };
-  }, [credentials.connected, credentials.port, enabledKey, id, refresh]);
+  }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, externalApi]);
   async function run() {
     if (active.current) return;
-    if (
-      !native ||
-      !credentials.connected ||
-      credentials.busy ||
-      credentials.stale ||
-      !model ||
-      catalogBusy
-    ) {
-      setError("请先连接管理接口并选择可用模型");
+    if (!native || !ready || !model || catalogBusy) {
+      setError(external ? "请先填写第三方 API 并选择可用模型" : "请先连接管理接口并选择可用模型");
       return;
     }
     const controller = new AbortController();
@@ -103,7 +112,10 @@ export function useProbe(credentials: ManagementSnapshot) {
     try {
       const collected = await collectSamples(
         challenges,
-        (prompt) => probeApi.sample(id, model!.id, prompt),
+        (prompt) =>
+          external
+            ? probeApi.externalSample(model!.id, prompt)
+            : probeApi.sample(id, model!.id, prompt),
         controller.signal,
         (current, rows) => {
           if (mounted.current) {
@@ -128,7 +140,7 @@ export function useProbe(credentials: ManagementSnapshot) {
         at: Date.now(),
         source: "auto",
         model: model!.id,
-        credential: "CLIProxy 自动路由",
+        credential: external ? `第三方 API · ${hostOf(externalApi.baseUrl)}` : "CLIProxy 自动路由",
         attempts: all,
       };
       setAttempts(all);
@@ -155,6 +167,30 @@ export function useProbe(credentials: ManagementSnapshot) {
     }
   }
   return {
+    source,
+    external,
+    ready,
+    externalApi,
+    setSource: (value: string) => {
+      if (active.current) return;
+      setSourceState(value);
+      try {
+        localStorage.setItem("probeSource", value);
+      } catch {
+        /* Optional preference. */
+      }
+    },
+    saveExternal: async (baseUrl: string, key: string) => {
+      const rows = await probeApi.externalSave(baseUrl, key);
+      setExternalApi(await probeApi.externalStatus());
+      announce();
+      return rows;
+    },
+    forgetExternal: async () => {
+      await probeApi.externalForget();
+      setExternalApi({ saved: false, baseUrl: "" });
+      announce();
+    },
     challenges,
     available,
     credential,
@@ -199,5 +235,19 @@ export function useProbe(credentials: ManagementSnapshot) {
       }
     },
   };
+}
+function announce() {
+  try {
+    localStorage.setItem("externalApi", String(Date.now()));
+  } catch {
+    /* Other window refreshes on next launch. */
+  }
+}
+function hostOf(url: string) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 export type ProbeState = ReturnType<typeof useProbe>;

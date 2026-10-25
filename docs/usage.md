@@ -21,6 +21,15 @@
 
 接口依据：[官方管理 API v8](https://help.router-for.me/management/apiv8) 及本地 CLIProxy 公开源码的标准模型路由。v8 只读取 `/config/access/api-keys`，既有 v0 连接读取 `/api-keys`；不下载完整配置或厂商认证文件。
 
+### 第三方 API / 中转站（0.2.24）
+
+- 在模型探查标题右侧切换 **CLIProxy / 第三方 API**，选择会被记住，主窗口和菜单栏同步。
+- 填写 OpenAI 兼容的 Base URL（通常以 `/v1` 结尾）和 API Key。应用请求 `<Base URL>/models` 读取模型，探查时请求 `<Base URL>/chat/completions`，采样数与分析与 CLIProxy 方式相同，消耗该服务额度。
+- 保存前先读取模型列表，失败不保存；更换地址时 Key 留空沿用已保存的 Key。
+- Base URL 远程地址必须是 `https`，`http` 仅允许 `localhost` / `127.0.0.1` / `[::1]`；不得包含账号、查询参数或片段。不跟随重定向，避免把 Key 发往其他主机。此通道使用系统代理设置（访问境外中转常需要），管理接口仍禁用代理。
+- Key 与地址以明文 JSON 保存在 `~/Library/Application Support/io.modellens.desktop/external-api.json`，目录 0700、文件 0600；仅 Rust 后端读取，不回传界面、不写日志。“忘记 Key”删除此文件。
+- 中转站可能改写模型或请求，结果仍是参考库内排名，不能认证中转站背后的真实型号。指定账号测试仅适用于 CLIProxy 凭证。
+
 ### 指定账号测试
 
 菜单栏、探查优先右侧列表和凭证卡片提供试管图标。点击后固定当时的账号和所选型号，进行三次采样与本地分析；关闭面板或收起窗口仍会继续，退出应用会结束任务。主窗口与菜单栏共享进度及最近十条快捷探查记录（含失败）；点击结果图标或历史图标可查看账号、所选型号、状态、参考库比对和原始采样。边框只在仍选择同一型号时显示。历史仅在本次应用运行期间保留，退出不保存回答；旧版本未记录的快捷探查无法补回。
@@ -208,6 +217,8 @@ pnpm package        # 生成当前 Mac 架构的 Release .app
 探查集成回归：启动 `pnpm dev` 后运行 `uv run --with playwright python tests/browser-probe.py`，使用合成 IPC 回答，不访问真实账号。
 凭证管理浏览器回归：在独立端口启动 `pnpm dev --port 1421`，运行 `uv run --with playwright python tests/browser-credentials.py`。脚本注入合成 IPC，不访问真实服务，覆盖启停账号查询、导入、删除、冲突、失败与菜单栏；可通过 `MODEL_LENS_TEST_URL` 指定本地测试地址。
 
+第三方 API 浏览器回归：启动 `pnpm dev` 后运行 `uv run --with playwright python tests/browser-external-probe.py`，使用合成 IPC，不访问真实服务。
+
 弹窗焦点浏览器回归：启动 `pnpm dev` 后运行 `uv run --with playwright python tests/browser-focus.py`。首次使用需通过 `uv run --with playwright playwright install chromium webkit` 安装测试浏览器；脚本仅访问本地 UI，不连接真实管理服务。
 
 开发服务器仅绑定 `127.0.0.1:1420`；端口占用时失败，不自动结束占用进程。前端支持 Vite HMR，Rust 修改由 Tauri 开发流程重建。重新打包不会替换正在运行的应用，需退出 **ModelLens** 后再打开新版；CLIProxy 无需重启。
@@ -229,7 +240,7 @@ pnpm package        # 生成当前 Mac 架构的 Release .app
 ## 数据与安全
 
 - 不扫描现有认证文件、DSH 密钥或浏览器凭据。除用户授权的专用客户端 API Key 管理接口外，不获取 CLIProxy 配置密钥；导入仅读取用户在应用中选择或粘贴的 JSON。
-- 网络客户端固定为回环地址，不使用系统代理，不跟随重定向，限制响应体大小和等待时间。
+- 管理网络客户端固定为回环地址，不使用系统代理，不跟随重定向，限制响应体大小和等待时间。第三方 API 仅访问用户填写的地址，要求 HTTPS（本机除外），不跟随重定向，使用系统代理。
 - 列表仅向 UI 投影账号名、厂商、状态等字段；丢弃 `account`、Token、文件路径和未经筛选的上游内容。错误只显示固定说明或 HTTP 状态码。
 - 管理密钥与本机端口以明文保存于本机专用文件，权限 0600，应用不启用云同步；凭证列表仍实时获取，额度白名单数据存入独立本地缓存（不含账号原文或认证密钥），窗口偏好使用 WebView localStorage。
 - 不修改代理、服务绑定、进程启停或额度重置；凭证文件导入/删除仅由用户明确操作触发。没有遥测、云同步和用户登录系统。
@@ -258,6 +269,7 @@ pnpm package        # 生成当前 Mac 架构的 Release .app
 - [0.2.14：凭证批量管理、自动命名和 GPT 额度信息](verification-0.2.14.md)
 - [0.2.15：凭证界面精简、等级同步与额度缓存](verification-0.2.15.md)
 - [0.2.16：后台额度刷新与指定账号测试](verification-0.2.16.md)
+- [0.2.24：第三方 API / 中转站探查](verification-0.2.24.md)
 
 测试覆盖列表脱敏、重复身份拒绝、v8/v0 兼容、HTTP 错误不回显、外部状态变更阻止写入、写入失败后核实且不重试、固定额度地址和 Token 占位符、额度百分比与窗口分类，以及原有进程发现。首次真实连接仍需用户在应用内输入管理密钥；模拟测试不等同于所有厂商实机兼容验证。
 

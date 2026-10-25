@@ -131,19 +131,7 @@ impl Api {
                 _ => format!("CLIProxy 返回 HTTP {status}"),
             });
         }
-        // Error bodies and credential payloads must never be logged or forwarded to the UI.
-        let mut bytes = Vec::new();
-        response
-            .take(4 * 1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| "读取服务响应失败")?;
-        if bytes.len() > 4 * 1024 * 1024 {
-            return Err("响应过大，已停止读取".into());
-        }
-        if bytes.is_empty() {
-            return Ok(Value::Null);
-        }
-        serde_json::from_slice(&bytes).map_err(|_| "服务未返回有效 JSON".into())
+        read_json(response)
     }
     pub fn list(&mut self) -> Result<Value, String> {
         match self.call(Method::GET, "/credentials", None) {
@@ -154,4 +142,20 @@ impl Api {
             result => result,
         }
     }
+}
+/// Reads a successful response body with a 4 MiB cap.
+pub(super) fn read_json(response: reqwest::blocking::Response) -> Result<Value, String> {
+    // Error bodies and credential payloads must never be logged or forwarded to the UI.
+    let mut bytes = Vec::new();
+    response
+        .take(4 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "读取服务响应失败")?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err("响应过大，已停止读取".into());
+    }
+    if bytes.is_empty() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "服务未返回有效 JSON".into())
 }

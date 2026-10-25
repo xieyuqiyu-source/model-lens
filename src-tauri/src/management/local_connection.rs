@@ -1,5 +1,5 @@
 use super::{transport::Api, Session};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 // Only this app's explicitly entered connection is stored; never search other apps' credentials.
 #[derive(Clone, Serialize, Deserialize)]
@@ -17,18 +17,24 @@ pub(super) struct LocalFile {
 }
 impl LocalFile {
     pub(super) fn for_app(app: &tauri::AppHandle) -> Result<Self, String> {
+        Self::named(app, "connection.json")
+    }
+    /// A private 0600 JSON file in this app's data directory.
+    pub(super) fn named(app: &tauri::AppHandle, name: &str) -> Result<Self, String> {
         use tauri::Manager;
         let directory = app
             .path()
             .app_data_dir()
             .map_err(|_| "无法定位本机连接目录")?;
         Ok(Self {
-            path: directory.join("connection.json"),
+            path: directory.join(name),
         })
     }
-}
-impl ConnectionStore for LocalFile {
-    fn load(&self) -> Result<Option<SavedConnection>, String> {
+    #[cfg(test)]
+    pub(super) fn at(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+    pub(super) fn read<T: DeserializeOwned>(&self) -> Result<Option<T>, String> {
         use std::io::Read;
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
@@ -61,7 +67,7 @@ impl ConnectionStore for LocalFile {
             .map_err(|_| "无法读取本机连接文件")?;
         decode(&bytes).map(Some)
     }
-    fn save(&self, connection: &SavedConnection) -> Result<(), String> {
+    pub(super) fn write<T: Serialize>(&self, connection: &T) -> Result<(), String> {
         use std::{fs, io::Write};
         // Write beside the destination, then atomically replace it. A failed write keeps
         // the previous connection intact; temporary files are removed on normal errors.
@@ -96,7 +102,7 @@ impl ConnectionStore for LocalFile {
         save()
             .map_err(|_| "连接成功，但本机文件保存失败；重启后仍使用此前保存的连接（若有）".into())
     }
-    fn forget(&self) -> Result<(), String> {
+    pub(super) fn remove(&self) -> Result<(), String> {
         match std::fs::remove_file(&self.path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -104,7 +110,18 @@ impl ConnectionStore for LocalFile {
         }
     }
 }
-fn decode(bytes: &[u8]) -> Result<SavedConnection, String> {
+impl ConnectionStore for LocalFile {
+    fn load(&self) -> Result<Option<SavedConnection>, String> {
+        self.read()
+    }
+    fn save(&self, connection: &SavedConnection) -> Result<(), String> {
+        self.write(connection)
+    }
+    fn forget(&self) -> Result<(), String> {
+        self.remove()
+    }
+}
+fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
     if bytes.len() > 65536 {
         return Err("本机连接记录无效，请忘记后重新连接".into());
     }
@@ -400,7 +417,7 @@ mod tests {
     }
     #[test]
     fn damaged_storage_is_redacted_and_invalid_key_never_connects() {
-        assert!(decode(b"private-broken-record")
+        assert!(decode::<SavedConnection>(b"private-broken-record")
             .err()
             .unwrap()
             .contains("记录无效"));

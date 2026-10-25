@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { Copy, RefreshCw } from "lucide-react";
+import { Segment } from "../../components/Segment";
+import { ExternalApi } from "./ExternalApi";
 import { PlanBadge } from "../credentials/PlanBadge";
 import { Select } from "../../components/Select";
 import { Disclosure } from "../../components/Disclosure";
@@ -40,6 +43,8 @@ type Props = {
 };
 export function Probe(p: Props) {
   const s = p.state;
+  const [editing, setEditing] = useState(false);
+  const formBusy = s.busy || (!s.external && p.managementBusy);
   const copy = (text: string) =>
     void navigator.clipboard.writeText(text).then(
       () => p.notify("提示词已复制"),
@@ -55,27 +60,45 @@ export function Probe(p: Props) {
         <div>
           <h1>模型探查</h1>
         </div>
+        <Segment
+          label="探查来源"
+          value={s.source}
+          onChange={s.setSource}
+          options={[
+            ["cliproxy", "CLIProxy"],
+            ["external", "第三方 API"],
+          ]}
+        />
       </header>
-      <fieldset className="probe-form" disabled={s.busy || p.managementBusy}>
+      <fieldset className="probe-form" disabled={formBusy}>
         <label>
           <span>模型</span>
           <ModelSelect state={s} />
         </label>
-        <label className="credential-choice">
-          <span>模型范围</span>
-          <Select
-            label="选择模型范围"
-            value={s.credential?.id ?? ""}
-            onChange={s.setCredentialId}
-            options={[
-              { value: "", label: "全部已启用凭证" },
-              ...s.available.map((c) => ({ value: c.id, label: c.name, brand: c.brand, detail: c.provider, badge: <PlanBadge credential={c} /> })),
-            ]}
-          />
-        </label>
+        {s.external ? (
+          <div className="credential-choice probe-field">
+            <span>第三方 API</span>
+            <button type="button" className="button" onClick={() => setEditing(true)}>
+              {s.externalApi.saved ? s.externalApi.baseUrl : "填写 Base URL 与 Key"}
+            </button>
+          </div>
+        ) : (
+          <label className="credential-choice">
+            <span>模型范围</span>
+            <Select
+              label="选择模型范围"
+              value={s.credential?.id ?? ""}
+              onChange={s.setCredentialId}
+              options={[
+                { value: "", label: "全部已启用凭证" },
+                ...s.available.map((c) => ({ value: c.id, label: c.name, brand: c.brand, detail: c.provider, badge: <PlanBadge credential={c} /> })),
+              ]}
+            />
+          </label>
+        )}
         <button
           className="button primary start"
-          disabled={!p.connected || p.stale || !s.model || s.catalogBusy}
+          disabled={!s.ready || !s.model || s.catalogBusy}
           onClick={() => void s.run()}
         >
           开始检测
@@ -85,23 +108,31 @@ export function Probe(p: Props) {
       {!s.busy && (
         <div className="probe-status">
           <span className="muted">
-            {!p.connected
-              ? "连接管理接口后可自动探查"
-              : s.catalogError ||
-                "3 次采样 · 消耗额度 · CLIProxy 路由"}
+            {s.external
+              ? !s.externalApi.saved
+                ? "填写第三方 API 后可探查"
+                : s.catalogError || "3 次采样 · 消耗额度 · 第三方 API 直连"
+              : !p.connected
+                ? "连接管理接口后可自动探查"
+                : s.catalogError ||
+                  "3 次采样 · 消耗额度 · CLIProxy 路由"}
           </span>
           <button
             className="text-button"
-            disabled={p.managementBusy || s.catalogBusy}
-            onClick={p.connected ? s.refreshModels : p.onConnect}
+            disabled={formBusy || s.catalogBusy}
+            onClick={
+              s.external
+                ? s.externalApi.saved ? s.refreshModels : () => setEditing(true)
+                : p.connected ? s.refreshModels : p.onConnect
+            }
           >
-            {p.connected ? (
+            {(s.external ? s.externalApi.saved : p.connected) ? (
               <>
                 <RefreshCw size={12} />
                 刷新模型
               </>
             ) : (
-              "连接"
+              s.external ? "填写" : "连接"
             )}
           </button>
         </div>
@@ -209,9 +240,10 @@ export function Probe(p: Props) {
           </Disclosure>
         </>
       )}
+      {editing && <ExternalApi state={s} notify={p.notify} onClose={() => setEditing(false)} />}
       <footer className="probe-foot">
         自动检测
-        <span>本机预览版 0.2.23</span>
+        <span>本机预览版 0.2.24</span>
       </footer>
     </section>
   );

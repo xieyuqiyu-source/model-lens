@@ -265,14 +265,16 @@ h3 {
   gap: 14px;
   margin: 6px 0 26px;
 }
-.probe-form label {
+.probe-form label,
+.probe-form .probe-field {
   display: flex;
   flex: 1;
   min-width: 0;
   flex-direction: column;
   gap: 10px;
 }
-.probe-form label > span {
+.probe-form label > span,
+.probe-form .probe-field > span {
   font-size: 10px;
   color: var(--muted);
 }
@@ -388,7 +390,8 @@ details p {
   display: block;
   margin: 0;
 }
-.compact .probe-form label {
+.compact .probe-form label,
+.compact .probe-form .probe-field {
   margin-bottom: 16px;
 }
 .compact .start {
@@ -1045,3 +1048,8 @@ textarea:focus {
 .cpa-version-values dd { margin: 5px 0 0; font-family: ui-monospace, monospace; font-size: 12px; user-select: text; }
 .cpa-version-source, .cpa-update-success { margin-top: 10px; font-size: 10px; }
 .cpa-update-success { display: flex; align-items: center; gap: 5px; }
+.probe-field > .button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

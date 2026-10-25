@@ -64,7 +64,7 @@ export default function App() {
   const [modal, setModal] = useState("");
   const [toast, setToast] = useState("");
   const [accountHistoryId, setAccountHistoryId] = useState<number | null>(null);
-  const accountProbe = useAccountProbe(credentials, probe.model?.id ?? "", setToast, runId => { setAccountHistoryId(runId); setModal("history"); });
+  const accountProbe = useAccountProbe(credentials, probe.external ? "" : probe.model?.id ?? "", setToast, runId => { setAccountHistoryId(runId); setModal("history"); });
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
   useEffect(() => {
@@ -83,6 +83,7 @@ export default function App() {
   const preview = (id: string) => {
     if (probe.busy) { setToast("请等待当前检测结束"); return; }
     probe.setCredentialId(id);
+    probe.setSource("cliproxy");
     changeFocus("probe");
   };
   const status = (
