@@ -4,9 +4,9 @@
 
 ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目录、比较采样结果和管理凭证，也可以从菜单栏快速确认各账号的额度与状态。应用使用 **Tauri 2 + Rust + React + TypeScript**，凭证操作由 Rust 后端处理，前端负责展示与交互。
 
-**当前版本：0.2.24 · 已交付 Apple Silicon Mac · 公开源码仓库**
+**当前版本：0.2.25 · 已交付 Apple Silicon Mac · 公开源码仓库**
 
-[快速开始](#快速开始) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.24.md)
+[快速开始](#快速开始) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.25.md)
 
 ## 界面预览
 
@@ -35,7 +35,7 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 | 场景 | 当前能力 |
 | --- | --- |
 | 查看可用模型 | 读取 CLIProxy 实时模型目录，保留服务的别名与前缀，支持按凭证筛选目录 |
-| 第三方 API 探查 | 填写 OpenAI 兼容的 Base URL 与 API Key（中转站或厂商 API），读取 `/models` 后选择模型直连采样 |
+| 第三方 API 探查 | 填写 OpenAI 兼容的 Base URL 与 API Key（中转站或厂商 API），可保存多个并下拉切换，读取 `/models` 后选择模型直连采样 |
 | 探查模型行为 | 最多三次采样，复用 58 个型号参考库进行本地分析，显示前三名及原始采样 |
 | 指定账号测试 | 最多三个账号同时测试，每个账号内部串行采样，主窗口与菜单栏共享任务与最近十条记录 |
 | 管理凭证 | 按 Codex / Gemini / Claude / Grok / Antigravity 分组，单个与组内批量启停、JSON 导入、确认删除 |
@@ -77,7 +77,7 @@ pnpm package
 
 管理接口仅连接 `http://127.0.0.1:<端口>`。管理密钥与厂商 API Key 不同，请直接在应用内输入。
 
-不经 CLIProxy 时，在“模型探查”右上角切到 **第三方 API**，填写 Base URL（如 `https://api.example.com/v1`）与 API Key，保存时会先读取模型列表验证。远程地址必须是 HTTPS，仅本机地址允许 HTTP；不跟随重定向，使用系统代理设置。
+不经 CLIProxy 时，在“模型探查”右上角切到 **第三方 API**，填写 Base URL（如 `https://api.example.com/v1`）与 API Key，保存时会先读取模型列表验证。可保存多个第三方 API（最多 50 个），在下拉中切换，或用旁边的铅笔按钮编辑、删除。远程地址必须是 HTTPS，仅本机地址允许 HTTP；不跟随重定向，使用系统代理设置。
 
 ### 3. 理解本地数据
 
@@ -86,7 +86,7 @@ pnpm package
 | 数据 | 位置或生命周期 |
 | --- | --- |
 | 管理连接 | `~/Library/Application Support/io.modellens.desktop/connection.json` |
-| 第三方 API | 同目录 `external-api.json`（0600）；保存 Base URL 与 API Key，Key 不回传界面，“忘记 Key”删除 |
+| 第三方 API | 同目录 `external-api.json`（0600）；保存多组名称、Base URL 与 API Key，Key 不回传界面；“删除此 API”只删对应一组 |
 | 额度缓存 | 同目录 `quota-cache.json`；仅保存白名单额度字段，账号身份使用散列键 |
 | 采样与历史 | 当前应用会话内保留，退出不保存回答 |
 | 界面偏好 | 本机 WebView 存储，记住布局、明暗模式与主题 |

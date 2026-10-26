@@ -132,7 +132,7 @@ fn main() {
             management::cpa::jobs::cpa_choose_directory,
             management::probe::probe_models,
             management::probe::probe_sample,
-            management::probe::external::external_status,
+            management::probe::external::external_list,
             management::probe::external::external_save,
             management::probe::external::external_forget,
             management::probe::external::external_models,

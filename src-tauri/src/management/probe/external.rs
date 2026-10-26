@@ -8,16 +8,38 @@ use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
 const FILE: &str = "external-api.json";
+const LIMIT: usize = 50;
 #[derive(Clone, Serialize, Deserialize)]
 struct Saved {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
     base_url: String,
     key: String,
 }
+#[derive(Default, Serialize, Deserialize)]
+struct Store {
+    entries: Vec<Saved>,
+}
+// 0.2.24 saved a single `{base_url,key}` object; read it as a one-entry list.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OnDisk {
+    List(Store),
+    Single(Saved),
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Status {
-    saved: bool,
+pub struct Entry {
+    id: String,
+    name: String,
     base_url: String,
+}
+#[derive(Serialize)]
+pub struct SaveResult {
+    id: String,
+    models: Vec<Model>,
 }
 fn base(raw: &str) -> Result<Url, String> {
     let raw = raw.trim().trim_end_matches('/');
@@ -97,10 +119,102 @@ fn sample(saved: &Saved, model: &str, prompt: &str) -> Result<Answer, String> {
     answer.elapsed_ms = started.elapsed().as_millis() as u64;
     Ok(answer)
 }
-fn load(store: &LocalFile) -> Result<Saved, String> {
+fn read(store: &LocalFile) -> Result<Store, String> {
+    Ok(match store.read::<OnDisk>()? {
+        None => Store::default(),
+        Some(OnDisk::List(list)) => list,
+        Some(OnDisk::Single(mut one)) => {
+            one.id = "legacy".into();
+            Store { entries: vec![one] }
+        }
+    })
+}
+fn load(store: &LocalFile, id: &str) -> Result<Saved, String> {
+    read(store)?
+        .entries
+        .into_iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| "所选第三方 API 不存在，请重新选择".to_owned())
+}
+fn host(url: &str) -> String {
+    Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+fn new_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    format!("{nanos:x}{:x}", NEXT.fetch_add(1, Ordering::Relaxed))
+}
+/// Validates, verifies by listing models, then upserts. Empty key keeps the edited entry's key.
+fn save(
+    store: &LocalFile,
+    id: Option<String>,
+    name: &str,
+    base_url: &str,
+    key: String,
+    list: impl Fn(&Saved) -> Result<Vec<Model>, String>,
+) -> Result<SaveResult, String> {
+    let mut all = read(store)?;
+    let existing = id.as_ref().map(|id| {
+        all.entries
+            .iter()
+            .position(|e| &e.id == id)
+            .ok_or_else(|| "所选第三方 API 不存在，请重新选择".to_owned())
+    });
+    let existing = existing.transpose()?;
+    let key = match (key.is_empty(), existing) {
+        (true, Some(i)) => all.entries[i].key.clone(),
+        (true, None) => return Err("请输入 API Key".into()),
+        (false, _) => key,
+    };
+    if !valid_key(&key) {
+        return Err("API Key 无效，不能含首尾空白或控制字符".into());
+    }
+    let name = name.trim();
+    if name.chars().count() > 60 || name.chars().any(char::is_control) {
+        return Err("名称最多 60 个字符".into());
+    }
+    let base_url: String = base(base_url)?.as_str().trim_end_matches('/').into();
+    let entry = Saved {
+        id: existing.map(|i| all.entries[i].id.clone()).unwrap_or_else(new_id),
+        name: if name.is_empty() { host(&base_url) } else { name.into() },
+        base_url,
+        key,
+    };
+    if existing.is_none() && all.entries.len() >= LIMIT {
+        return Err(format!("最多保存 {LIMIT} 个第三方 API"));
+    }
+    let models = list(&entry)?;
+    let id = entry.id.clone();
+    match existing {
+        Some(i) => all.entries[i] = entry,
+        None => all.entries.push(entry),
+    }
     store
-        .read()?
-        .ok_or_else(|| "请先填写第三方 API".to_owned())
+        .write(&all)
+        .map_err(|_| "已读取模型，但本机文件保存失败".to_owned())?;
+    Ok(SaveResult { id, models })
+}
+fn forget(store: &LocalFile, id: &str) -> Result<(), String> {
+    let mut all = read(store)?;
+    let before = all.entries.len();
+    all.entries.retain(|e| e.id != id);
+    if all.entries.len() == before {
+        return Ok(());
+    }
+    if all.entries.is_empty() {
+        store.remove()
+    } else {
+        store
+            .write(&all)
+            .map_err(|_| "无法更新本机文件，记录未删除".to_owned())
+    }
 }
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -110,60 +224,46 @@ async fn blocking<T: Send + 'static>(
         .map_err(|_| "第三方 API 任务未完成".to_owned())?
 }
 #[tauri::command]
-pub async fn external_status(app: tauri::AppHandle) -> Result<Status, String> {
+pub async fn external_list(app: tauri::AppHandle) -> Result<Vec<Entry>, String> {
     blocking(move || {
-        let saved: Option<Saved> = LocalFile::named(&app, FILE)?.read()?;
-        Ok(Status {
-            saved: saved.is_some(),
-            base_url: saved.map(|s| s.base_url).unwrap_or_default(),
-        })
+        Ok(read(&LocalFile::named(&app, FILE)?)?
+            .entries
+            .into_iter()
+            .map(|e| Entry {
+                id: e.id,
+                name: if e.name.is_empty() { host(&e.base_url) } else { e.name },
+                base_url: e.base_url,
+            })
+            .collect())
     })
     .await
 }
-/// Verifies the endpoint by listing models before saving; an empty key reuses the saved one.
 #[tauri::command]
 pub async fn external_save(
     app: tauri::AppHandle,
+    id: Option<String>,
+    name: String,
     base_url: String,
     key: String,
-) -> Result<Vec<Model>, String> {
-    blocking(move || {
-        let store = LocalFile::named(&app, FILE)?;
-        let key = if key.is_empty() {
-            load(&store).map_err(|_| "请输入 API Key".to_owned())?.key
-        } else {
-            key
-        };
-        if !valid_key(&key) {
-            return Err("API Key 无效，不能含首尾空白或控制字符".into());
-        }
-        let saved = Saved {
-            base_url: base(&base_url)?.as_str().trim_end_matches('/').into(),
-            key,
-        };
-        let rows = models(&saved)?;
-        store
-            .write(&saved)
-            .map_err(|_| "已读取模型，但本机文件保存失败".to_owned())?;
-        Ok(rows)
-    })
-    .await
+) -> Result<SaveResult, String> {
+    blocking(move || save(&LocalFile::named(&app, FILE)?, id, &name, &base_url, key, models)).await
 }
 #[tauri::command]
-pub async fn external_forget(app: tauri::AppHandle) -> Result<(), String> {
-    blocking(move || LocalFile::named(&app, FILE)?.remove()).await
+pub async fn external_forget(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    blocking(move || forget(&LocalFile::named(&app, FILE)?, &id)).await
 }
 #[tauri::command]
-pub async fn external_models(app: tauri::AppHandle) -> Result<Vec<Model>, String> {
-    blocking(move || models(&load(&LocalFile::named(&app, FILE)?)?)).await
+pub async fn external_models(app: tauri::AppHandle, id: String) -> Result<Vec<Model>, String> {
+    blocking(move || models(&load(&LocalFile::named(&app, FILE)?, &id)?)).await
 }
 #[tauri::command]
 pub async fn external_sample(
     app: tauri::AppHandle,
+    id: String,
     model: String,
     prompt: String,
 ) -> Result<Answer, String> {
-    blocking(move || sample(&load(&LocalFile::named(&app, FILE)?)?, &model, &prompt)).await
+    blocking(move || sample(&load(&LocalFile::named(&app, FILE)?, &id)?, &model, &prompt)).await
 }
 
 #[cfg(test)]
@@ -172,6 +272,8 @@ mod tests {
     use crate::management::tests::server;
     fn saved(port: u16) -> Saved {
         Saved {
+            id: String::new(),
+            name: String::new(),
             base_url: format!("http://127.0.0.1:{port}/v1"),
             key: "third-party-secret".into(),
         }
@@ -214,19 +316,58 @@ mod tests {
         assert!(models(&s).err().unwrap().contains("重定向"));
         assert_eq!(task.join().unwrap().len(), 2);
     }
+    fn ok(_: &Saved) -> Result<Vec<Model>, String> {
+        Ok(vec![])
+    }
     #[test]
-    fn saved_record_roundtrips_privately() {
+    fn multiple_entries_upsert_reuse_key_and_forget_privately() {
         let dir = tempfile::tempdir().unwrap();
-        let store = LocalFile::at(dir.path().join(FILE));
-        store.write(&saved(1)).unwrap();
+        let path = dir.path().join(FILE);
+        let store = LocalFile::at(path.clone());
+        let a = save(&store, None, "", "https://a.example.com/v1/", "key-a".into(), ok).unwrap().id;
+        let b = save(&store, None, "Relay B", "https://b.example.com/v1", "key-b".into(), ok).unwrap().id;
+        assert_ne!(a, b);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.path().join(FILE)).unwrap().permissions().mode();
-            assert_eq!(mode & 0o777, 0o600);
+            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
         }
-        assert_eq!(load(&store).unwrap().key, "third-party-secret");
-        store.remove().unwrap();
-        assert!(load(&store).is_err());
+        let all = read(&store).unwrap().entries;
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].name, "a.example.com");
+        assert_eq!(all[0].base_url, "https://a.example.com/v1");
+        // Editing with an empty key keeps that entry's own key.
+        save(&store, Some(a.clone()), "A2", "https://a2.example.com/v1", String::new(), ok).unwrap();
+        let edited = load(&store, &a).unwrap();
+        assert!(edited.key == "key-a" && edited.name == "A2" && edited.base_url.contains("a2."));
+        assert_eq!(load(&store, &b).unwrap().key, "key-b");
+        assert!(save(&store, None, "", "https://c.example.com", String::new(), ok).is_err());
+        assert!(save(&store, Some("missing".into()), "", "https://c.example.com", "k".into(), ok).is_err());
+        forget(&store, &a).unwrap();
+        assert!(load(&store, &a).is_err());
+        assert_eq!(read(&store).unwrap().entries.len(), 1);
+        forget(&store, &b).unwrap();
+        assert!(!path.exists());
+    }
+    #[test]
+    fn failed_verification_does_not_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LocalFile::at(dir.path().join(FILE));
+        let fail = |_: &Saved| -> Result<Vec<Model>, String> { Err("auth".into()) };
+        assert!(save(&store, None, "", "https://a.example.com/v1", "k".into(), fail).is_err());
+        assert!(read(&store).unwrap().entries.is_empty());
+    }
+    #[test]
+    fn single_record_from_0_2_24_is_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE);
+        std::fs::write(&path, r#"{"base_url":"https://old.example.com/v1","key":"old-key"}"#).unwrap();
+        let store = LocalFile::at(path);
+        let all = read(&store).unwrap().entries;
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, "legacy");
+        save(&store, None, "", "https://new.example.com/v1", "new-key".into(), ok).unwrap();
+        assert_eq!(load(&store, "legacy").unwrap().key, "old-key");
+        assert_eq!(read(&store).unwrap().entries.len(), 2);
     }
 }

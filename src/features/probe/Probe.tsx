@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, RefreshCw } from "lucide-react";
+import { Copy, Pencil, RefreshCw } from "lucide-react";
 import { Segment } from "../../components/Segment";
 import { ExternalApi } from "./ExternalApi";
 import { PlanBadge } from "../credentials/PlanBadge";
@@ -41,9 +41,10 @@ type Props = {
   managementBusy: boolean;
   stale: boolean;
 };
+const ADD = "\u0000add";
 export function Probe(p: Props) {
   const s = p.state;
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<"" | "new" | "edit">("");
   const formBusy = s.busy || (!s.external && p.managementBusy);
   const copy = (text: string) =>
     void navigator.clipboard.writeText(text).then(
@@ -78,9 +79,26 @@ export function Probe(p: Props) {
         {s.external ? (
           <div className="credential-choice probe-field">
             <span>第三方 API</span>
-            <button type="button" className="button" onClick={() => setEditing(true)}>
-              {s.externalApi.saved ? s.externalApi.baseUrl : "填写 Base URL 与 Key"}
-            </button>
+            {s.entry ? (
+              <div className="external-pick">
+                <Select
+                  label="选择第三方 API"
+                  value={s.entry.id}
+                  onChange={(v) => (v === ADD ? setEditing("new") : s.setEntryId(v))}
+                  options={[
+                    ...s.entries.map((e) => ({ value: e.id, label: e.name, detail: e.baseUrl })),
+                    { value: ADD, label: "＋ 添加第三方 API" },
+                  ]}
+                />
+                <button type="button" className="icon-button" aria-label="编辑第三方 API" title="编辑或删除" onClick={() => setEditing("edit")}>
+                  <Pencil size={14} />
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="button" onClick={() => setEditing("new")}>
+                添加 Base URL 与 Key
+              </button>
+            )}
           </div>
         ) : (
           <label className="credential-choice">
@@ -109,8 +127,8 @@ export function Probe(p: Props) {
         <div className="probe-status">
           <span className="muted">
             {s.external
-              ? !s.externalApi.saved
-                ? "填写第三方 API 后可探查"
+              ? !s.entry
+                ? "添加第三方 API 后可探查"
                 : s.catalogError || "3 次采样 · 消耗额度 · 第三方 API 直连"
               : !p.connected
                 ? "连接管理接口后可自动探查"
@@ -122,17 +140,17 @@ export function Probe(p: Props) {
             disabled={formBusy || s.catalogBusy}
             onClick={
               s.external
-                ? s.externalApi.saved ? s.refreshModels : () => setEditing(true)
+                ? s.entry ? s.refreshModels : () => setEditing("new")
                 : p.connected ? s.refreshModels : p.onConnect
             }
           >
-            {(s.external ? s.externalApi.saved : p.connected) ? (
+            {(s.external ? s.entry : p.connected) ? (
               <>
                 <RefreshCw size={12} />
                 刷新模型
               </>
             ) : (
-              s.external ? "填写" : "连接"
+              s.external ? "添加" : "连接"
             )}
           </button>
         </div>
@@ -240,10 +258,17 @@ export function Probe(p: Props) {
           </Disclosure>
         </>
       )}
-      {editing && <ExternalApi state={s} notify={p.notify} onClose={() => setEditing(false)} />}
+      {editing && (
+        <ExternalApi
+          state={s}
+          entry={editing === "edit" ? s.entry ?? null : null}
+          notify={p.notify}
+          onClose={() => setEditing("")}
+        />
+      )}
       <footer className="probe-foot">
         自动检测
-        <span>本机预览版 0.2.24</span>
+        <span>本机预览版 0.2.25</span>
       </footer>
     </section>
   );

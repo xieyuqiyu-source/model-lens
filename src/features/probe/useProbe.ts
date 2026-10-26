@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ManagementSnapshot } from "../credentials/data";
 import { native } from "../service/api";
 import { generateChallenges } from "./vendor/challenge.js";
-import { analyze, probeApi, type ProbeModel } from "./api";
+import { analyze, probeApi, type ExternalEntry, type ProbeModel } from "./api";
 import { collectSamples } from "./run";
 import type { Challenge, ProbeRecord, Sample } from "./analysis";
 export function useProbe(credentials: ManagementSnapshot) {
@@ -31,21 +31,26 @@ export function useProbe(credentials: ManagementSnapshot) {
     }
   });
   const external = source === "external";
-  const [externalApi, setExternalApi] = useState({ saved: false, baseUrl: "" });
+  const [entries, setEntries] = useState<ExternalEntry[]>([]);
+  const [entryId, setEntryIdState] = useState(() => readStored("externalId"));
+  const entry = entries.find((e) => e.id === entryId) ?? entries[0];
+  const loadEntries = () =>
+    native ? probeApi.externalList().then((rows) => setEntries(rows ?? []), () => {}) : Promise.resolve();
   useEffect(() => {
-    if (native) void probeApi.externalStatus().then(setExternalApi, () => {});
+    void loadEntries();
   }, []);
   useEffect(() => {
     const sync = (event: StorageEvent) => {
       if (event.key === "model") setModelId(event.newValue ?? "");
       // Keep main window and tray on the same source and saved endpoint.
       if (event.key === "probeSource") setSourceState(event.newValue === "external" ? "external" : "cliproxy");
-      if (event.key === "externalApi") void probeApi.externalStatus().then(setExternalApi, () => {});
+      if (event.key === "externalId") setEntryIdState(event.newValue ?? "");
+      if (event.key === "externalApi") void loadEntries();
     };
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
   }, []);
-  const ready = external ? externalApi.saved : credentials.connected && !credentials.busy && !credentials.stale;
+  const ready = external ? !!entry : credentials.connected && !credentials.busy && !credentials.stale;
   const model = models.find((m) => m.id === modelId) ?? models[0];
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogError, setCatalogError] = useState("");
@@ -72,12 +77,12 @@ export function useProbe(credentials: ManagementSnapshot) {
     let cancelled = false;
     setModels([]);
     setCatalogError("");
-    if (!native || (external ? !externalApi.saved : !credentials.connected)) {
+    if (!native || (external ? !entry : !credentials.connected)) {
       setCatalogBusy(false);
       return;
     }
     setCatalogBusy(true);
-    void (external ? probeApi.externalModels() : probeApi.models(id))
+    void (external ? probeApi.externalModels(entry!.id) : probeApi.models(id))
       .then((rows) => {
         if (!cancelled) {
           setModels(rows);
@@ -95,7 +100,7 @@ export function useProbe(credentials: ManagementSnapshot) {
     return () => {
       cancelled = true;
     };
-  }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, externalApi]);
+  }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, entry?.id, entry?.baseUrl]);
   async function run() {
     if (active.current) return;
     if (!native || !ready || !model || catalogBusy) {
@@ -114,7 +119,7 @@ export function useProbe(credentials: ManagementSnapshot) {
         challenges,
         (prompt) =>
           external
-            ? probeApi.externalSample(model!.id, prompt)
+            ? probeApi.externalSample(entry!.id, model!.id, prompt)
             : probeApi.sample(id, model!.id, prompt),
         controller.signal,
         (current, rows) => {
@@ -140,7 +145,7 @@ export function useProbe(credentials: ManagementSnapshot) {
         at: Date.now(),
         source: "auto",
         model: model!.id,
-        credential: external ? `第三方 API · ${hostOf(externalApi.baseUrl)}` : "CLIProxy 自动路由",
+        credential: external ? `第三方 API · ${entry!.name}` : "CLIProxy 自动路由",
         attempts: all,
       };
       setAttempts(all);
@@ -170,7 +175,13 @@ export function useProbe(credentials: ManagementSnapshot) {
     source,
     external,
     ready,
-    externalApi,
+    entries,
+    entry,
+    setEntryId: (value: string) => {
+      if (active.current) return;
+      setEntryIdState(value);
+      store("externalId", value);
+    },
     setSource: (value: string) => {
       if (active.current) return;
       setSourceState(value);
@@ -180,16 +191,20 @@ export function useProbe(credentials: ManagementSnapshot) {
         /* Optional preference. */
       }
     },
-    saveExternal: async (baseUrl: string, key: string) => {
-      const rows = await probeApi.externalSave(baseUrl, key);
-      setExternalApi(await probeApi.externalStatus());
-      announce();
-      return rows;
+    saveExternal: async (id: string | null, name: string, baseUrl: string, key: string) => {
+      const saved = await probeApi.externalSave(id, name, baseUrl, key);
+      await loadEntries();
+      setEntryIdState(saved.id);
+      store("externalId", saved.id);
+      // Same entry edited: force the model list to reload from the new address.
+      setRefresh((n) => n + 1);
+      store("externalApi", String(Date.now()));
+      return saved.models;
     },
-    forgetExternal: async () => {
-      await probeApi.externalForget();
-      setExternalApi({ saved: false, baseUrl: "" });
-      announce();
+    forgetExternal: async (id: string) => {
+      await probeApi.externalForget(id);
+      await loadEntries();
+      store("externalApi", String(Date.now()));
     },
     challenges,
     available,
@@ -236,18 +251,18 @@ export function useProbe(credentials: ManagementSnapshot) {
     },
   };
 }
-function announce() {
+function readStored(key: string) {
   try {
-    localStorage.setItem("externalApi", String(Date.now()));
+    return localStorage.getItem(key) ?? "";
   } catch {
-    /* Other window refreshes on next launch. */
+    return "";
   }
 }
-function hostOf(url: string) {
+function store(key: string, value: string) {
   try {
-    return new URL(url).host;
+    localStorage.setItem(key, value);
   } catch {
-    return url;
+    /* Optional preference; other window syncs on next launch. */
   }
 }
 export type ProbeState = ReturnType<typeof useProbe>;

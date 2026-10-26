@@ -136,3 +136,5 @@
 ## 0.2.24 第三方 API 探查（2026-10-26）
 
 用户要求新增第三方 API／中转站探查：填写 OpenAI 兼容 Base URL 与 API Key，读取 `/models` 后选模型经 `/chat/completions` 采样。Key 仅存应用数据目录 `external-api.json`（0600），只在 Rust 后端使用，不回传界面、不写日志；“忘记 Key”删除。远程须 HTTPS（回环可 HTTP），不跟随重定向；此通道使用系统代理，管理接口仍禁用代理。reqwest 新增 `native-tls`、`system-proxy` 特性。开发验收只用合成 HTTP/IPC，未调用真实第三方服务。
+
+- 0.2.25：用户要求保存多个第三方 Key。`external-api.json` 改为列表（最多 50 组，含 id/名称/Base URL/Key），兼容读取 0.2.24 单条记录为 `legacy` 组。下拉切换并记住所选 id，编辑时 Key 留空沿用该组；删除仅删对应组，最后一组删除后移除文件。Key 仍只在 Rust 后端使用。

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Challenge, Detection, Sample } from "./analysis";
+export type ExternalEntry = { id: string; name: string; baseUrl: string };
 export type ProbeModel = { id: string; name: string; brand: string };
 export type Answer = {
   text: string;
@@ -13,13 +14,13 @@ export const probeApi = {
   models: (id: string) => invoke<ProbeModel[]>("probe_models", { id }),
   sample: (id: string, model: string, prompt: string) =>
     invoke<Answer>("probe_sample", { id, model, prompt }),
-  externalStatus: () => invoke<{ saved: boolean; baseUrl: string }>("external_status"),
-  externalSave: (baseUrl: string, key: string) =>
-    invoke<ProbeModel[]>("external_save", { baseUrl, key }),
-  externalForget: () => invoke<void>("external_forget"),
-  externalModels: () => invoke<ProbeModel[]>("external_models"),
-  externalSample: (model: string, prompt: string) =>
-    invoke<Answer>("external_sample", { model, prompt }),
+  externalList: () => invoke<ExternalEntry[]>("external_list"),
+  externalSave: (id: string | null, name: string, baseUrl: string, key: string) =>
+    invoke<{ id: string; models: ProbeModel[] }>("external_save", { id, name, baseUrl, key }),
+  externalForget: (id: string) => invoke<void>("external_forget", { id }),
+  externalModels: (id: string) => invoke<ProbeModel[]>("external_models", { id }),
+  externalSample: (id: string, model: string, prompt: string) =>
+    invoke<Answer>("external_sample", { id, model, prompt }),
 };
 export function analyze(
   samples: Sample[],

@@ -1,14 +1,16 @@
 import { useRef, useState } from "react";
 import { Modal } from "../../components/Common";
+import type { ExternalEntry } from "./api";
 import type { ProbeState } from "./useProbe";
-export function ExternalApi({ state, onClose, notify }: { state: ProbeState; onClose: () => void; notify: (text: string) => void }) {
+/** Adds a new third-party API when `entry` is null, otherwise edits it. */
+export function ExternalApi({ state, entry, onClose, notify }: { state: ProbeState; entry: ExternalEntry | null; onClose: () => void; notify: (text: string) => void }) {
   const form = useRef<HTMLFormElement>(null);
-  const [baseUrl, setBaseUrl] = useState(state.externalApi.baseUrl);
+  const [name, setName] = useState(entry?.name ?? "");
+  const [baseUrl, setBaseUrl] = useState(entry?.baseUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const saved = state.externalApi.saved;
   return (
-    <Modal title="第三方 API" onClose={onClose}>
+    <Modal title={entry ? "编辑第三方 API" : "添加第三方 API"} onClose={onClose}>
       {(dismiss) => (
         <form
           ref={form}
@@ -19,7 +21,7 @@ export function ExternalApi({ state, onClose, notify }: { state: ProbeState; onC
             setBusy(true);
             setError("");
             try {
-              const rows = await state.saveExternal(baseUrl, input.value);
+              const rows = await state.saveExternal(entry?.id ?? null, name, baseUrl, input.value);
               input.value = "";
               notify(`已保存，读取到 ${rows.length} 个模型`);
               dismiss();
@@ -30,6 +32,17 @@ export function ExternalApi({ state, onClose, notify }: { state: ProbeState; onC
             }
           }}
         >
+          <label>
+            名称（可选）
+            <input
+              aria-label="名称"
+              maxLength={60}
+              value={name}
+              disabled={busy}
+              placeholder="留空使用域名"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
           <label>
             Base URL
             <input
@@ -45,14 +58,14 @@ export function ExternalApi({ state, onClose, notify }: { state: ProbeState; onC
             />
           </label>
           <label>
-            {saved ? "更换 API Key（留空沿用已保存）" : "API Key"}
+            {entry ? "更换 API Key（留空沿用已保存）" : "API Key"}
             <input
               name="key"
               aria-label="API Key"
               type="password"
               autoComplete="off"
               spellCheck={false}
-              required={!saved}
+              required={!entry}
               maxLength={8192}
               disabled={busy}
               placeholder="sk-…"
@@ -67,22 +80,22 @@ export function ExternalApi({ state, onClose, notify }: { state: ProbeState; onC
             </p>
           )}
           <div className="modal-actions">
-            {saved ? (
+            {entry ? (
               <button
                 type="button"
                 className="text-button"
                 disabled={busy}
                 onClick={async () => {
                   try {
-                    await state.forgetExternal();
-                    notify("已删除第三方 API 记录");
+                    await state.forgetExternal(entry.id);
+                    notify(`已删除 ${entry.name}`);
                     dismiss();
                   } catch (err) {
                     setError(typeof err === "string" ? err : "删除失败");
                   }
                 }}
               >
-                忘记 Key
+                删除此 API
               </button>
             ) : (
               <span />

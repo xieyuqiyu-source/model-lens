@@ -21,13 +21,14 @@
 
 接口依据：[官方管理 API v8](https://help.router-for.me/management/apiv8) 及本地 CLIProxy 公开源码的标准模型路由。v8 只读取 `/config/access/api-keys`，既有 v0 连接读取 `/api-keys`；不下载完整配置或厂商认证文件。
 
-### 第三方 API / 中转站（0.2.24）
+### 第三方 API / 中转站（0.2.24 起，0.2.25 支持多个）
 
 - 在模型探查标题右侧切换 **CLIProxy / 第三方 API**，选择会被记住，主窗口和菜单栏同步。
 - 填写 OpenAI 兼容的 Base URL（通常以 `/v1` 结尾）和 API Key。应用请求 `<Base URL>/models` 读取模型，探查时请求 `<Base URL>/chat/completions`，采样数与分析与 CLIProxy 方式相同，消耗该服务额度。
-- 保存前先读取模型列表，失败不保存；更换地址时 Key 留空沿用已保存的 Key。
+- 可保存多个第三方 API（最多 50 个）。下拉选择当前使用的一组，末项“＋ 添加第三方 API”新增；铅笔按钮编辑或删除当前一组。名称可选，留空使用域名；选择会被记住。
+- 保存前先读取模型列表，失败不保存；编辑时 Key 留空沿用该组已保存的 Key。0.2.24 保存的单条记录升级后自动作为第一组保留。
 - Base URL 远程地址必须是 `https`，`http` 仅允许 `localhost` / `127.0.0.1` / `[::1]`；不得包含账号、查询参数或片段。不跟随重定向，避免把 Key 发往其他主机。此通道使用系统代理设置（访问境外中转常需要），管理接口仍禁用代理。
-- Key 与地址以明文 JSON 保存在 `~/Library/Application Support/io.modellens.desktop/external-api.json`，目录 0700、文件 0600；仅 Rust 后端读取，不回传界面、不写日志。“忘记 Key”删除此文件。
+- Key 与地址以明文 JSON 保存在 `~/Library/Application Support/io.modellens.desktop/external-api.json`，目录 0700、文件 0600；仅 Rust 后端读取，不回传界面、不写日志。“删除此 API”只移除对应一组，最后一组删除后文件随之删除。
 - 中转站可能改写模型或请求，结果仍是参考库内排名，不能认证中转站背后的真实型号。指定账号测试仅适用于 CLIProxy 凭证。
 
 ### 指定账号测试
@@ -270,6 +271,7 @@ pnpm package        # 生成当前 Mac 架构的 Release .app
 - [0.2.15：凭证界面精简、等级同步与额度缓存](verification-0.2.15.md)
 - [0.2.16：后台额度刷新与指定账号测试](verification-0.2.16.md)
 - [0.2.24：第三方 API / 中转站探查](verification-0.2.24.md)
+- [0.2.25：保存多个第三方 API](verification-0.2.25.md)
 
 测试覆盖列表脱敏、重复身份拒绝、v8/v0 兼容、HTTP 错误不回显、外部状态变更阻止写入、写入失败后核实且不重试、固定额度地址和 Token 占位符、额度百分比与窗口分类，以及原有进程发现。首次真实连接仍需用户在应用内输入管理密钥；模拟测试不等同于所有厂商实机兼容验证。
 

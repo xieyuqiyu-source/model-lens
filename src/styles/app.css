@@ -1053,3 +1053,13 @@ textarea:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.external-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.external-pick > :first-child {
+  flex: 1;
+  min-width: 0;
+}
