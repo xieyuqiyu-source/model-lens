@@ -2113,7 +2113,7 @@ dependencies = [
 
 [[package]]
 name = "model-lens"
-version = "0.2.27"
+version = "0.2.28"
 dependencies = [
  "libc",
  "objc2",

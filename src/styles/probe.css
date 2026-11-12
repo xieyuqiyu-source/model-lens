@@ -1,3 +1,42 @@
+.probe-mode-controls,
+.manual-probe {
+  min-width: 0;
+  margin: 0;
+}
+.probe-mode-controls {
+  border: 0;
+  padding: 0;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+.manual-probe {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.manual-probe-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.manual-probe textarea {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+  line-height: 1.8;
+}
+.probe > .probe-foot {
+  justify-content: flex-end;
+}
 fieldset.probe-form {
   border: 0;
   padding: 0;

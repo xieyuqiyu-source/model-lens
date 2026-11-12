@@ -159,7 +159,7 @@ with sync_playwright() as p:
                     control.click()
                     expect(control).to_have_css('background-color', before)
                     assert not has_shadow(control)
-                expect(page.get_by_role('button', name='手动检测', exact=True)).to_have_count(0)
+                expect(page.get_by_role('button', name='手动检测', exact=True)).to_have_attribute('aria-pressed', 'false')
                 for palette in ['翡翠绿', '海湾蓝', '鸢尾紫']:
                     for mode in ['浅色', '深色']:
                         trigger.click()

@@ -9,6 +9,8 @@ export function useProbe(credentials: ManagementSnapshot) {
   const [challenges, setChallenges] = useState<Challenge[]>(() =>
     generateChallenges(3),
   );
+  const [manual, setManual] = useState(false);
+  const [answers, setAnswers] = useState(["", "", ""]);
   const [credentialId, setCredentialId] = useState("");
   const available = credentials.credentials.filter(
     (c) => c.enabled,
@@ -103,7 +105,16 @@ export function useProbe(credentials: ManagementSnapshot) {
   }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, entry?.id, entry?.baseUrl]);
   async function run() {
     if (active.current) return;
-    if (!native || !ready || !model || catalogBusy) {
+    const pasted: Sample[] = manual
+      ? challenges
+          .map((challenge, i) => ({ ...challenge, slot: i + 1, text: answers[i] }))
+          .filter((sample) => sample.text.trim())
+      : [];
+    if (manual && !pasted.length) {
+      setError("请粘贴至少一份模型回答");
+      return;
+    }
+    if (!manual && (!native || !ready || !model || catalogBusy)) {
       setError(external ? "请先填写第三方 API 并选择可用模型" : "请先连接管理接口并选择可用模型");
       return;
     }
@@ -113,22 +124,24 @@ export function useProbe(credentials: ManagementSnapshot) {
     setStopping(false);
     setError("");
     setResult(null);
-    setAttempts([]);
+    setAttempts(pasted);
     try {
-      const collected = await collectSamples(
-        challenges,
-        (prompt) =>
-          external
-            ? probeApi.externalSample(entry!.id, model!.id, prompt)
-            : probeApi.sample(id, model!.id, prompt),
-        controller.signal,
-        (current, rows) => {
-          if (mounted.current) {
-            setPhase(`采样 ${current} / 3`);
-            setAttempts(rows);
-          }
-        },
-      );
+      const collected = manual
+        ? { samples: pasted, attempts: pasted, warnings: [] }
+        : await collectSamples(
+            challenges,
+            (prompt) =>
+              external
+                ? probeApi.externalSample(entry!.id, model!.id, prompt)
+                : probeApi.sample(id, model!.id, prompt),
+            controller.signal,
+            (current, rows) => {
+              if (mounted.current) {
+                setPhase(`采样 ${current} / 3`);
+                setAttempts(rows);
+              }
+            },
+          );
       const outputs = collected.samples;
       const all = collected.attempts;
       const warnings = collected.warnings;
@@ -143,9 +156,9 @@ export function useProbe(credentials: ManagementSnapshot) {
         warnings: [...warnings, ...detection.warnings],
         id: crypto.randomUUID(),
         at: Date.now(),
-        source: "auto",
-        model: model!.id,
-        credential: external ? `第三方 API · ${entry!.name}` : "CLIProxy 自动路由",
+        source: manual ? "manual" : "auto",
+        model: manual ? "手动回答" : model!.id,
+        credential: manual ? "" : external ? `第三方 API · ${entry!.name}` : "CLIProxy 自动路由",
         attempts: all,
       };
       setAttempts(all);
@@ -172,6 +185,23 @@ export function useProbe(credentials: ManagementSnapshot) {
     }
   }
   return {
+    manual,
+    setMode: (mode: string) => {
+      const next = mode === "manual";
+      if (active.current || manual === next) return;
+      setManual(next);
+      setError("");
+      setResult(null);
+      setAttempts([]);
+    },
+    answers,
+    setAnswer: (index: number, text: string) => {
+      if (active.current) return;
+      setAnswers((old) => old.map((answer, i) => i === index ? text : answer));
+      setError("");
+      setResult(null);
+      setAttempts([]);
+    },
     source,
     external,
     ready,
@@ -237,7 +267,8 @@ export function useProbe(credentials: ManagementSnapshot) {
     },
     newRound: () => {
       if (!active.current) {
-        setChallenges(generateChallenges(3));
+        setChallenges(generateChallenges(3, challenges.map((challenge) => challenge.expected_count)));
+        setAnswers(["", "", ""]);
         setResult(null);
         setAttempts([]);
         setError("");

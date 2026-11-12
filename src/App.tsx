@@ -82,6 +82,7 @@ export default function App() {
   }, [isTray, modal]);
   const preview = (id: string) => {
     if (probe.busy) { setToast("请等待当前检测结束"); return; }
+    probe.setMode("auto");
     probe.setCredentialId(id);
     probe.setSource("cliproxy");
     changeFocus("probe");

@@ -21,7 +21,10 @@ window.mockCatalog = [
 const callbacks = new Map(); let nextCallback = 0;
 window.mockSnapshot = {connected:true,saved:true,port:8317,busy:false,stale:false,error:null,revision:1,credentials:[0,1].map(i=>({id:`mock-${i}`,name:`sample-${i}@example.invalid`,brand:i?'gemini':'openai',provider:i?'gemini':'codex',enabled:true,editable:true,deletable:true,fileName:`mock-${i}.json`,deleteToken:`mock-${i}`,supported:!i,five:null,week:null,resetFive:'',resetWeek:'',quotaAt:null,quotaError:null}))};
 window.mockPublish = () => { mockSnapshot.revision++; for(const cb of callbacks.values()) cb({event:'credentials-changed',payload:structuredClone(mockSnapshot)}); };
-localStorage.setItem('mode','manual'); // Old preference must not restore the removed UI.
+localStorage.setItem('mode','manual'); // A pre-0.2.12 preference must not change the default.
+Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{
+ writeText(text) { window.mockClipboard = text; return Promise.resolve(); }
+}});
 
 window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {unregisterListener() {}};
 window.__TAURI_INTERNALS__ = {
@@ -61,7 +64,8 @@ with sync_playwright() as p:
   start=page.get_by_role('button',name='开始检测',exact=True)
   expect(start).to_be_enabled()
   assert page.evaluate('mockCalls.length')==0
-  expect(page.get_by_role('button',name='手动检测',exact=True)).to_have_count(0)
+  manual=page.get_by_role('button',name='手动检测',exact=True)
+  expect(manual).to_have_attribute('aria-pressed','false')
   expect(page.get_by_role('textbox',name=re.compile('模型回答'))).to_have_count(0)
   page.get_by_role('button',name='选择模型：GPT Test',exact=True).click()
   expect(page.get_by_role('option')).to_have_count(4)
@@ -130,6 +134,70 @@ with sync_playwright() as p:
   page.get_by_role('button',name='新一组提示词',exact=True).click()
   expect(start).to_be_enabled()
   expect(result).to_have_count(0)
+
+  page.evaluate("mockSnapshot.connected=false; mockPublish(); mockCalls=[]; mockCatalogCalls=[]")
+  expect(start).to_be_disabled()
+  page.get_by_role('button',name='凭证优先',exact=True).click()
+  page.set_viewport_size({'width':960,'height':760})
+  manual.click()
+  expect(page.locator('.probe.compact')).to_have_count(0)
+  expect(manual).to_have_attribute('aria-pressed','true')
+  score=page.get_by_role('button',name='开始评分',exact=True)
+  expect(score).to_be_disabled()
+  expect(start).to_have_count(0)
+  page.get_by_role('button',name='回答 2',exact=True).click()
+  answer2=page.get_by_role('textbox',name='模型回答 2',exact=True)
+  copy=page.get_by_role('button',name='复制对应提示词',exact=True)
+  copy.click()
+  prompts=page.get_by_role('button',name='检测提示词',exact=True)
+  if prompts.get_attribute('aria-expanded')=='false':
+   prompts.click()
+  prompt2=page.locator('.probe-sample').filter(has_text=re.compile('提示词 2 ·')).locator('p').text_content()
+  copied=page.evaluate('mockClipboard')
+  assert copied==prompt2, (copied,prompt2,errors)
+  prompts.click()
+  answer2.fill('没有数字')
+  score.click()
+  expect(page.get_by_role('alert')).to_contain_text('有效整数不足')
+  expect(answer2).to_have_value('没有数字')
+  samples=[', '.join(str((i * (17 + slot * 6) + slot * 41) % 355 + 1) for i in range(300)) for slot in range(3)]
+  answer2.fill(samples[1])
+  score.click()
+  expect(result).to_contain_text('1 / 3 有效样本',timeout=30000)
+  expect(result).not_to_contain_text('库内置信度')
+  page.get_by_role('button',name='自动检测',exact=True).click()
+  expect(start).to_be_disabled()
+  manual.click()
+  page.get_by_role('button',name='回答 2',exact=True).click()
+  expect(answer2).to_have_value(samples[1])
+  for slot in [1,3]:
+   page.get_by_role('button',name=f'回答 {slot}',exact=True).click()
+   page.get_by_role('textbox',name=f'模型回答 {slot}',exact=True).fill(samples[slot-1])
+  score.click()
+  expect(result).to_contain_text('3 / 3 有效样本',timeout=30000)
+  expect(result).to_contain_text('库内置信度')
+  page.get_by_role('button',name='原始回答与采样详情',exact=True).click()
+  expect(page.get_by_text(re.compile('回答 [123] · 手动输入'))).to_have_count(3)
+  record2=page.locator('.probe-sample').filter(has_text='回答 2 · 手动输入')
+  assert record2.locator('p').text_content()==prompt2
+  assert record2.locator('pre').text_content()==samples[1]
+  page.get_by_role('button',name='原始回答与采样详情',exact=True).click()
+  page.get_by_role('button',name='历史',exact=True).click()
+  history=page.get_by_role('dialog')
+  expect(history.get_by_role('button',name=re.compile(r'手动回答.*3\/3'))).to_be_visible()
+  history.get_by_role('button',name='关闭',exact=True).click()
+  expect(history).to_have_count(0)
+  page.locator('.probe').evaluate('e => e.scrollTop = 0')
+  page.screenshot(path=f'/tmp/modellens-probe-manual-{engine.name}.png')
+  page.get_by_role('button',name='更换提示词并清空回答',exact=True).click()
+  expect(page.get_by_role('textbox',name='模型回答 1',exact=True)).to_have_value('')
+  expect(score).to_be_disabled()
+  expect(result).to_have_count(0)
+  page.get_by_role('button',name='回答 2',exact=True).click()
+  expect(answer2).to_have_value('')
+  copy.click()
+  assert page.evaluate('mockClipboard')!=prompt2
+  assert page.evaluate('mockCalls.length + mockCatalogCalls.length')==0
   assert not errors,errors
-  print(f'{engine.name}: 全厂商目录、刷新/错误、范围更新、无手动入口、窄栏无重叠、三份采样/部分/取消/历史通过',flush=True)
+  print(f'{engine.name}: 自动目录、采样/取消、窄栏、离线手动复制/校验/一份与三份评分/历史通过',flush=True)
   browser.close()
