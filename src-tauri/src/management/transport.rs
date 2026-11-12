@@ -143,8 +143,16 @@ impl Api {
         }
     }
 }
-/// Reads a successful response body with a 4 MiB cap.
 pub(super) fn read_json(response: reqwest::blocking::Response) -> Result<Value, String> {
+    let bytes = read_body(response)?;
+    if bytes.is_empty() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "服务未返回有效 JSON".into())
+}
+
+/// Reads a successful response body with a 4 MiB cap.
+pub(super) fn read_body(response: reqwest::blocking::Response) -> Result<Vec<u8>, String> {
     // Error bodies and credential payloads must never be logged or forwarded to the UI.
     let mut bytes = Vec::new();
     response
@@ -154,8 +162,5 @@ pub(super) fn read_json(response: reqwest::blocking::Response) -> Result<Value, 
     if bytes.len() > 4 * 1024 * 1024 {
         return Err("响应过大，已停止读取".into());
     }
-    if bytes.is_empty() {
-        return Ok(Value::Null);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| "服务未返回有效 JSON".into())
+    Ok(bytes)
 }

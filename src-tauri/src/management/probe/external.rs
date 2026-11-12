@@ -1,8 +1,13 @@
 //! Third-party OpenAI-compatible endpoint (relay or vendor API) for model probing.
 //! The key is stored only in this app's private 0600 file and never returned to the webview.
 use super::{parse_models, response, Answer, Model};
-use crate::management::local_connection::LocalFile;
-use reqwest::{blocking::Client, redirect::Policy, Url};
+use crate::management::{local_connection::LocalFile, transport};
+use reqwest::{
+    blocking::{Client, Response},
+    header::CONTENT_TYPE,
+    redirect::Policy,
+    Url,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -63,7 +68,7 @@ fn base(raw: &str) -> Result<Url, String> {
 fn valid_key(key: &str) -> bool {
     key.len() <= 8192 && key.trim() == key && !key.chars().any(char::is_control)
 }
-fn request(saved: &Saved, body: Option<&Value>) -> Result<Value, String> {
+fn request(saved: &Saved, body: Option<&Value>) -> Result<Response, String> {
     let url = base(&saved.base_url)?;
     let (path, timeout) = if body.is_some() {
         ("/chat/completions", 120)
@@ -102,10 +107,10 @@ fn request(saved: &Saved, body: Option<&Value>) -> Result<Value, String> {
             _ => format!("第三方 API 返回 HTTP {status}"),
         });
     }
-    crate::management::transport::read_json(response)
+    Ok(response)
 }
 fn models(saved: &Saved) -> Result<Vec<Model>, String> {
-    parse_models(&request(saved, None)?, "data")
+    parse_models(&transport::read_json(request(saved, None)?)?, "data")
 }
 fn sample(saved: &Saved, model: &str, prompt: &str) -> Result<Answer, String> {
     if model.is_empty()
@@ -119,7 +124,18 @@ fn sample(saved: &Saved, model: &str, prompt: &str) -> Result<Answer, String> {
     let started = Instant::now();
     let payload = json!({"model":model,"stream":false,"max_tokens":6000,
         "messages":[{"role":"user","content":prompt}]});
-    let mut answer = response::parse(&request(saved, Some(&payload))?)?;
+    let reply = request(saved, Some(&payload))?;
+    let is_stream = reply
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream"));
+    let mut answer = if is_stream {
+        response::parse_stream(&transport::read_body(reply)?)?
+    } else {
+        response::parse(&transport::read_json(reply)?)?
+    };
     answer.elapsed_ms = started.elapsed().as_millis() as u64;
     Ok(answer)
 }
@@ -272,7 +288,7 @@ pub async fn external_sample(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::management::tests::server;
+    use crate::management::tests::{server, server_with_bodies};
     fn saved(port: u16) -> Saved {
         Saved {
             id: String::new(),
@@ -332,6 +348,23 @@ mod tests {
         assert!(requests
             .iter()
             .all(|request| !request.to_ascii_lowercase().contains("\r\nauthorization:")));
+    }
+    #[test]
+    fn probes_api_returning_sse_despite_non_stream_request() {
+        let stream = concat!(
+            ": heartbeat\r\n\r\n",
+            "data: {\"model\":\"relay-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1, \"}}]}\r\n\r\n",
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"2\"},\"finish_reason\":\"stop\"}]}\r\n\r\n",
+            "data: {\"choices\":[],\"usage\":{}}\r\n\r\n",
+            "data: [DONE]\r\n\r\n",
+        );
+        let (port, task) =
+            server_with_bodies(vec![(200, "text/event-stream; charset=utf-8", stream.into())]);
+        let answer = sample(&saved(port), "relay-model", "prompt").unwrap();
+        assert_eq!(answer.text, "1, 2");
+        assert_eq!(answer.finish, "stop");
+        assert_eq!(answer.reported_model, "relay-model");
+        assert!(task.join().unwrap()[0].contains("\"stream\":false"));
     }
     #[test]
     fn errors_are_redacted_and_redirects_not_followed() {

@@ -5,11 +5,28 @@ use std::{
     thread,
 };
 pub(super) fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec<String>>) {
+    server_with_bodies(
+        replies
+            .into_iter()
+            .map(|(status, body)| {
+                let body = if status == 204 {
+                    String::new()
+                } else {
+                    body.to_string()
+                };
+                (status, "application/json", body)
+            })
+            .collect(),
+    )
+}
+pub(super) fn server_with_bodies(
+    replies: Vec<(u16, &'static str, String)>,
+) -> (u16, thread::JoinHandle<Vec<String>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = thread::spawn(move || {
         let mut requests = Vec::new();
-        for (status, body) in replies {
+        for (status, content_type, body) in replies {
             let (mut stream, _) = listener.accept().unwrap();
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(3)))
@@ -34,12 +51,7 @@ pub(super) fn server(replies: Vec<(u16, Value)>) -> (u16, thread::JoinHandle<Vec
                 }
             }
             requests.push(String::from_utf8(request).unwrap());
-            let body = if status == 204 {
-                String::new()
-            } else {
-                body.to_string()
-            };
-            write!(stream,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            write!(stream,"HTTP/1.1 {status} Test\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
         }
         requests
     });

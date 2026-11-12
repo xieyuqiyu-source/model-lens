@@ -1,4 +1,4 @@
-use super::Answer;
+use super::{response::sse_data, Answer};
 use serde_json::Value;
 
 pub(super) fn parse(provider: &str, envelope: &Value) -> Result<Answer, String> {
@@ -108,13 +108,8 @@ fn completed_response(text: &str) -> Result<Value, String> {
     // Only terminal snapshots are used; deltas are never appended a second time.
     let normalized = text.replace("\r\n", "\n");
     let mut completed = None;
-    for event in normalized.split("\n\n") {
-        let data = event
-            .lines()
-            .filter_map(|l| l.strip_prefix("data:").map(str::trim_start))
-            .collect::<Vec<_>>()
-            .join("\n");
-        if data.is_empty() || data == "[DONE]" {
+    for data in sse_data(&normalized) {
+        if data == "[DONE]" {
             continue;
         }
         let value: Value = serde_json::from_str(&data).map_err(|_| "采样流格式异常")?;
