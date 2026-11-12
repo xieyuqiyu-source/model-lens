@@ -58,14 +58,13 @@ export function ExternalApi({ state, entry, onClose, notify }: { state: ProbeSta
             />
           </label>
           <label>
-            {entry ? "更换 API Key（留空沿用已保存）" : "API Key"}
+            {entry ? "更换 API Key（留空沿用原设置）" : "API Key（可选）"}
             <input
               name="key"
               aria-label="API Key"
               type="password"
               autoComplete="off"
               spellCheck={false}
-              required={!entry}
               maxLength={8192}
               disabled={busy}
               placeholder="sk-…"

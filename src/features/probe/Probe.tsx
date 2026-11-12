@@ -96,7 +96,7 @@ export function Probe(p: Props) {
               </div>
             ) : (
               <button type="button" className="button" onClick={() => setEditing("new")}>
-                添加 Base URL 与 Key
+                添加第三方 API
               </button>
             )}
           </div>
@@ -268,7 +268,7 @@ export function Probe(p: Props) {
       )}
       <footer className="probe-foot">
         自动检测
-        <span>本机预览版 0.2.25</span>
+        <span>本机预览版 0.2.26</span>
       </footer>
     </section>
   );

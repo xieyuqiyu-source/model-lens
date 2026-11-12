@@ -61,7 +61,7 @@ fn base(raw: &str) -> Result<Url, String> {
     Ok(url)
 }
 fn valid_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= 8192 && key.trim() == key && !key.chars().any(char::is_control)
+    key.len() <= 8192 && key.trim() == key && !key.chars().any(char::is_control)
 }
 fn request(saved: &Saved, body: Option<&Value>) -> Result<Value, String> {
     let url = base(&saved.base_url)?;
@@ -84,8 +84,12 @@ fn request(saved: &Saved, body: Option<&Value>) -> Result<Value, String> {
         Some(body) => client.post(url).json(body),
         None => client.get(url),
     };
+    let request = if saved.key.is_empty() {
+        request
+    } else {
+        request.bearer_auth(&saved.key)
+    };
     let response = request
-        .bearer_auth(&saved.key)
         .send()
         .map_err(|_| "无法连接第三方 API，或请求已超时".to_owned())?;
     let status = response.status().as_u16();
@@ -170,8 +174,7 @@ fn save(
     let existing = existing.transpose()?;
     let key = match (key.is_empty(), existing) {
         (true, Some(i)) => all.entries[i].key.clone(),
-        (true, None) => return Err("请输入 API Key".into()),
-        (false, _) => key,
+        _ => key,
     };
     if !valid_key(&key) {
         return Err("API Key 无效，不能含首尾空白或控制字符".into());
@@ -309,6 +312,28 @@ mod tests {
         assert!(requests[1].contains("\"model\":\"relay/gpt\""));
     }
     #[test]
+    fn saves_and_probes_without_authorization() {
+        let (port, task) = server(vec![
+            (200, json!({"data":[{"id":"local-model"}]})),
+            (200, json!({"model":"local-model","choices":[{"message":{"content":"1, 2"},"finish_reason":"stop"}]})),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let store = LocalFile::at(dir.path().join(FILE));
+        let url = format!("http://127.0.0.1:{port}/v1");
+        let result = save(&store, None, "", &url, String::new(), models).unwrap();
+        assert_eq!(result.models.len(), 1);
+        let entry = load(&store, &result.id).unwrap();
+        assert!(entry.key.is_empty());
+        let answer = sample(&entry, "local-model", "prompt").unwrap();
+        assert_eq!(answer.reported_model, "local-model");
+        let requests = task.join().unwrap();
+        assert!(requests[0].starts_with("GET /v1/models "));
+        assert!(requests[1].starts_with("POST /v1/chat/completions "));
+        assert!(requests
+            .iter()
+            .all(|request| !request.to_ascii_lowercase().contains("\r\nauthorization:")));
+    }
+    #[test]
     fn errors_are_redacted_and_redirects_not_followed() {
         let (port, task) = server(vec![(401, json!({"error":"secret detail"})), (302, json!({}))]);
         let s = saved(port);
@@ -341,7 +366,7 @@ mod tests {
         let edited = load(&store, &a).unwrap();
         assert!(edited.key == "key-a" && edited.name == "A2" && edited.base_url.contains("a2."));
         assert_eq!(load(&store, &b).unwrap().key, "key-b");
-        assert!(save(&store, None, "", "https://c.example.com", String::new(), ok).is_err());
+        assert!(save(&store, None, "", "https://c.example.com", " ".into(), ok).is_err());
         assert!(save(&store, Some("missing".into()), "", "https://c.example.com", "k".into(), ok).is_err());
         forget(&store, &a).unwrap();
         assert!(load(&store, &a).is_err());
