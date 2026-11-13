@@ -22,7 +22,7 @@ export type Credential = {
   quotaAt: number | null;
   quotaError: string | null;
 };
-export type AccountTest = { credentialId: string; credential: string; runId: number; model: string; status: string; message: string; at: number };
+export type AccountTest = { credentialId: string; credential: string; runId: number; model: string; status: string; message: string; at: number; bankVersion?: string };
 export type ManagementSnapshot = {
   accountTests?: Record<string, AccountTest>;
   accountHistory?: (AccountTest & { samples: import("../probe/analysis").Sample[] })[];

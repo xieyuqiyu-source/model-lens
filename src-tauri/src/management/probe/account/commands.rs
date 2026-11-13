@@ -9,11 +9,16 @@ pub async fn probe_account_samples(
     model: String,
     challenges: Vec<Challenge>,
     previous_run_id: Option<u64>,
+    bank_version: Option<String>,
 ) -> Result<Batch, String> {
     if id.len() > 1100
         || model.is_empty()
         || model.len() > 512
         || model.chars().any(char::is_control)
+        || bank_version.as_ref().is_some_and(|version| {
+            version != "builtin"
+                && (version.len() != 64 || !version.bytes().all(|b| b.is_ascii_hexdigit()))
+        })
         || challenges.len() != 3
         || challenges.iter().any(|c| {
             c.id.len() > 100
@@ -38,7 +43,7 @@ pub async fn probe_account_samples(
                 .try_lock()
                 .map_err(|_| "管理操作正在进行，请稍后重试")?;
             validate_retry(&s, &id, previous_run_id)?;
-            reserve(&mut s, &id, &model)?;
+            reserve(&mut s, &id, &model, bank_version)?;
             let job = job_session(&s, &id);
             s.publish(&app);
             job

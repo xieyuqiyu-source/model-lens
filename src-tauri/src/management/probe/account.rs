@@ -14,6 +14,8 @@ pub struct AccountTest {
     pub status: String,
     pub message: String,
     pub at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_version: Option<String>,
     #[serde(skip)]
     pub identity: String,
 }
@@ -118,7 +120,12 @@ fn validate_retry(s: &Session, id: &str, previous: Option<u64>) -> Result<(), St
     }
     Ok(())
 }
-fn reserve(s: &mut Session, id: &str, model: &str) -> Result<u64, String> {
+fn reserve(
+    s: &mut Session,
+    id: &str,
+    model: &str,
+    bank_version: Option<String>,
+) -> Result<u64, String> {
     if !s.snapshot.connected || s.snapshot.stale || s.snapshot.busy {
         return Err("管理连接尚未就绪".into());
     }
@@ -146,6 +153,7 @@ fn reserve(s: &mut Session, id: &str, model: &str) -> Result<u64, String> {
             status: "running".into(),
             message: "准备采样".into(),
             at: now(),
+            bank_version,
             identity: identity(r),
         },
     );

@@ -1,5 +1,6 @@
 mod discovery;
 mod management;
+mod reference_bank;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -103,6 +104,7 @@ fn main() {
         }))
         .manage(DiscoveryLock(Mutex::new(())))
         .manage(management::Management::default())
+        .manage(reference_bank::BankState::default())
         .invoke_handler(tauri::generate_handler![
             discover_services,
             set_appearance,
@@ -132,6 +134,9 @@ fn main() {
             management::cpa::jobs::cpa_choose_directory,
             management::probe::probe_models,
             management::probe::probe_sample,
+            reference_bank::probe_reference_status,
+            reference_bank::probe_reference_update,
+            reference_bank::probe_reference_analyze,
             management::probe::external::external_list,
             management::probe::external::external_save,
             management::probe::external::external_forget,
@@ -142,6 +147,7 @@ fn main() {
         ])
         .setup(|app| {
             management::start_quota_timer(app.handle().clone());
+            reference_bank::start(app.handle().clone());
             let open = MenuItem::with_id(app, "open", "打开 ModelLens", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出 ModelLens", true, Some("CmdOrCtrl+Q"))?;
             let menu = Menu::with_items(app, &[&open, &quit])?;

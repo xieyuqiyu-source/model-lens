@@ -35,6 +35,7 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'set_appearance') return;
     if (cmd === 'cpa_job') return {busy:false,message:'',revision:0,logs:[]};
     if (cmd === 'probe_models') return [];
+    if (cmd === 'probe_reference_status') return {bank:{builtAt:'2026-10-07',modelCount:58,version:'builtin'},busy:false,message:'',revision:0};
     if (!['management_snapshot','credential_toggle','credential_import','credential_delete','quota_refresh','credentials_list','credentials_toggle','credentials_delete','copy_client_key'].includes(cmd))
       throw new Error(`Unexpected mock command: ${cmd}`);
     const s = window.__testSnapshot;

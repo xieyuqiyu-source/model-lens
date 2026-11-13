@@ -10,9 +10,15 @@ test('账号型号匹配仅在完整校准且证据足够时着色', () => {
  for (const patch of [{used_outputs:2},{probability_status:'unavailable'},{probability:null}]) {
   const r=result();Object.assign(r.analysis,patch);assert.equal(accountVerdict('gpt-5.4',r).status,'unknown');
  }
+ const unusual = result();
+ Object.assign(unusual.analysis, {decision:'not_model',results:[],evidence:{label:'无法评分'}});
+ assert.deepEqual(accountVerdict('gpt-5.4',unusual), {status:'unknown',message:'gpt-5.4：无法评分，尚不能判断是否匹配'});
 });
 test('只归一化明确的型号写法，不猜测自定义路由别名', () => {
  assert.equal(accountVerdict('claude-sonnet-4-6',result('claude-sonnet-4.6')).status,'match');
+ const fable = result('claude-fable-5.2');
+ fable.analysis.results.push({model:'claude-fable-5.2'});
+ assert.equal(accountVerdict('claude-fable-5-2',fable).status,'match');
  assert.equal(accountVerdict('gemini-3.8-flash-high',result('gemini-3.8-flash')).status,'match');
  assert.equal(accountVerdict('gpt-6.1-sol',result('gpt-6-astra')).status,'match');
  assert.equal(accountVerdict('team/gpt-5.4',result()).status,'unknown');

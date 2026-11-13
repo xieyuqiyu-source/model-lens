@@ -1,5 +1,5 @@
 import { Fingerprint, Copy } from "lucide-react";
-import type { ProbeRecord } from "./analysis";
+import { builtinBank, detectorCommit, type ProbeRecord } from "./analysis";
 export function ProbeResult({
   record,
   notify,
@@ -8,6 +8,7 @@ export function ProbeResult({
   notify: (text: string) => void;
 }) {
   const r = record.analysis;
+  const bank = record.referenceBank ?? builtinBank;
   return (
     <article className="result" aria-label="检测结果">
       <header>
@@ -25,7 +26,7 @@ export function ProbeResult({
           </p>
         </div>
       </div>
-      <div className="rankings">
+      {r.results.length > 0 && <div className="rankings">
         <span className="meta">
           参考库内排序{r.probability !== null ? " · 库内置信度" : ""}
         </span>
@@ -42,7 +43,7 @@ export function ProbeResult({
             </small>
           </div>
         ))}
-      </div>
+      </div>}
       <p className="muted probe-caveat">{r.evidence.reason} 不代表身份认证。</p>
       {record.warnings.map((w, i) => (
         <p className="notice" key={i}>
@@ -51,7 +52,7 @@ export function ProbeResult({
       ))}
       <footer>
         <span className="meta">
-          {record.credential}
+          {record.credential && `${record.credential} · `}指纹库 {bank.builtAt.slice(0, 10)}
         </span>
         <button
           className="text-button"
@@ -61,7 +62,7 @@ export function ProbeResult({
                 JSON.stringify(
                   {
                     ...record,
-                    detectorCommit: "4ffda94e5e24a05c4f55d6f14a1e27f4ef23c8f3",
+                    detectorCommit: bank.version === builtinBank.version ? detectorCommit : undefined,
                   },
                   null,
                   2,

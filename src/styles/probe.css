@@ -37,6 +37,19 @@
 .probe > .probe-foot {
   justify-content: flex-end;
 }
+.probe-bank {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.probe-bank-message {
+  flex-basis: 100%;
+  text-align: end;
+}
+.compact .probe-bank-message {
+  text-align: start;
+}
 fieldset.probe-form {
   border: 0;
   padding: 0;

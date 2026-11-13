@@ -56,6 +56,7 @@ mod tests {
                 status: "running".into(),
                 message: String::new(),
                 at: super::super::now(),
+                bank_version: None,
                 identity: String::new(),
             },
         );

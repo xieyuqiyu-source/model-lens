@@ -16,11 +16,11 @@ function AccountDetail({ entry, probe, notify, onRun }: { entry: Entry; probe: A
     setDetection(null); setError("");
     if (running || !entry.samples.length) return;
     const controller = new AbortController();
-    void analyze(entry.samples, controller.signal).then(setDetection).catch(e => {
-      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "本地分析失败");
+    void analyze(entry.samples, controller.signal, entry.bankVersion).then(setDetection).catch(e => {
+      if (!controller.signal.aborted) setError(typeof e === "string" ? e : e instanceof Error ? e.message : "本地分析失败");
     });
     return () => controller.abort();
-  }, [entry.runId, entry.status, entry.samples.length, running]);
+  }, [entry.runId, entry.status, entry.samples.length, entry.bankVersion, running]);
   return <div className="account-history-detail">
     <strong>{entry.credential} · {accountStatusLabel(entry.status)}</strong>
     <p className="muted">{entry.model} · {new Date(entry.at * 1000).toLocaleString("zh-CN")}</p>

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { ManagementSnapshot } from "../credentials/data";
 import { generateChallenges } from "./vendor/challenge.js";
-import { analyze, probeApi } from "./api";
+import { analyze, currentBank, probeApi } from "./api";
 import { accountVerdict } from "./accountMatch";
 import { accountActive, accountStatusLabel } from "./accountStatus";
 
@@ -21,10 +21,11 @@ export function useAccountProbe(state: ManagementSnapshot, model: string, notify
       let runId: number | undefined;
       const name = state.credentials.find(c => c.id === id)?.name ?? "账号";
       try {
-        const batch = await probeApi.accountSamples(id, model, generateChallenges(3), previousRunId);
+        const bank = await currentBank();
+        const batch = await probeApi.accountSamples(id, model, generateChallenges(3), bank.version, previousRunId);
         runId = batch.runId;
         if (batch.error) { notify(`${name}：${batch.error}`); return; }
-        const detection = await analyze(batch.samples, new AbortController().signal);
+        const detection = await analyze(batch.samples, new AbortController().signal, bank.version);
         const verdict = accountVerdict(model, detection);
         await probeApi.accountFinish(id, runId, verdict.status, verdict.message);
         notify(`${name}：${accountStatusLabel(verdict.status)}，可查看历史详情`);

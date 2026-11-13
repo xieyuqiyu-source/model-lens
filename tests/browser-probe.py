@@ -19,8 +19,19 @@ window.mockCatalog = [
  {id:'team/alias',name:'Custom alias',brand:'unknown'},
 ];
 const callbacks = new Map(); let nextCallback = 0;
+const listeners = new Map();
+const mockBank = {bank:{builtAt:'2026-10-07',modelCount:58,version:'builtin'},busy:false,message:'',revision:0};
+function publishBank() {
+ mockBank.revision++;
+ callbacks.get(listeners.get('probe-reference-changed'))?.({payload:structuredClone(mockBank)});
+}
+window.bankCalls = [];
+window.failBank = false;
 window.mockSnapshot = {connected:true,saved:true,port:8317,busy:false,stale:false,error:null,revision:1,credentials:[0,1].map(i=>({id:`mock-${i}`,name:`sample-${i}@example.invalid`,brand:i?'gemini':'openai',provider:i?'gemini':'codex',enabled:true,editable:true,deletable:true,fileName:`mock-${i}.json`,deleteToken:`mock-${i}`,supported:!i,five:null,week:null,resetFive:'',resetWeek:'',quotaAt:null,quotaError:null}))};
-window.mockPublish = () => { mockSnapshot.revision++; for(const cb of callbacks.values()) cb({event:'credentials-changed',payload:structuredClone(mockSnapshot)}); };
+window.mockPublish = () => {
+ mockSnapshot.revision++;
+ callbacks.get(listeners.get('credentials-changed'))?.({payload:structuredClone(mockSnapshot)});
+};
 localStorage.setItem('mode','manual'); // A pre-0.2.12 preference must not change the default.
 Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{
  writeText(text) { window.mockClipboard = text; return Promise.resolve(); }
@@ -30,9 +41,28 @@ window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {unregisterListener() {}};
 window.__TAURI_INTERNALS__ = {
  transformCallback(cb) { callbacks.set(++nextCallback,cb); return nextCallback; }, unregisterCallback(id) {callbacks.delete(id);},
  async invoke(cmd, args) {
-  if(cmd === 'plugin:event|listen') return 1;
+  if(cmd === 'plugin:event|listen') { listeners.set(args.event,args.handler); return args.handler; }
   if(cmd === 'discover_services') return {services:[],checkedAt:1,statusKnown:false,warning:null};
   if(cmd === 'management_snapshot') return structuredClone(mockSnapshot);
+  if(cmd === 'probe_reference_status') return structuredClone(mockBank);
+  if(cmd === 'probe_reference_update') {
+   mockBank.busy=true; mockBank.message=''; publishBank();
+   await new Promise(resolve=>setTimeout(resolve,160));
+   if(failBank) mockBank.message='无法连接上游指纹库，继续使用当前库';
+   else {
+    mockBank.bank={builtAt:'2026-11-12',modelCount:70,version:'a'.repeat(64)};
+    mockBank.message='指纹库已更新';
+   }
+   mockBank.busy=false; publishBank();
+   return;
+  }
+  if(cmd === 'probe_reference_analyze') {
+   bankCalls.push(args);
+   return {referenceBank:structuredClone(mockBank.bank),analysis:{decision:'partial',
+    prediction:'mock-bank-model',prediction_name:'更新库模型',used_outputs:args.outputs.length,
+    results:[{model:'mock-bank-model',display_name:'更新库模型',probability:null}],
+    probability:null,evidence:{label:'Partial',reason:'Sample'}}};
+  }
   if(cmd === 'probe_models') {
    mockCatalogCalls.push(args.id);
    if(window.mockCatalogError) throw '模拟模型刷新失败';
@@ -198,6 +228,24 @@ with sync_playwright() as p:
   copy.click()
   assert page.evaluate('mockClipboard')!=prompt2
   assert page.evaluate('mockCalls.length + mockCatalogCalls.length')==0
+  update=page.get_by_role('button',name='立即更新指纹库',exact=True)
+  page.evaluate('failBank=true')
+  update.click()
+  expect(update).to_be_disabled()
+  expect(page.get_by_text('无法连接上游指纹库，继续使用当前库')).to_be_visible()
+  expect(page.get_by_text('指纹库 2026-10-07 · 58 个模型')).to_be_visible()
+  page.evaluate('failBank=false')
+  update.click()
+  expect(page.get_by_text('指纹库已更新')).to_be_visible()
+  expect(page.get_by_text('指纹库 2026-11-12 · 70 个模型')).to_be_visible()
+  answer2.fill(samples[1])
+  score.click()
+  expect(result).to_contain_text('更新库模型')
+  expect(result).to_contain_text('指纹库 2026-11-12')
+  assert page.evaluate("bankCalls.length===1 && bankCalls[0].version==='a'.repeat(64)")
+  assert page.evaluate("Object.keys(bankCalls[0].outputs[0]).sort().join(',')==='expected_count,text'")
+  page.locator('.probe-bank').scroll_into_view_if_needed()
+  page.screenshot(path=f'/tmp/modellens-reference-bank-{engine.name}.png')
   assert not errors,errors
-  print(f'{engine.name}: 自动目录、采样/取消、窄栏、离线手动复制/校验/一份与三份评分/历史通过',flush=True)
+  print(f'{engine.name}: 自动采样、手动评分、历史、指纹库更新及失败回退通过',flush=True)
   browser.close()

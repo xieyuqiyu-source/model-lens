@@ -42,6 +42,7 @@ fn analyzing(s: &mut Session) {
             status: "analyzing".into(),
             message: "".into(),
             at: now(),
+            bank_version: None,
             identity: identity(&s.records[ID]),
         },
     );
@@ -70,6 +71,10 @@ fn three_samples_remain_pinned_through_oauth_metadata_updates() {
     )
     .unwrap();
     assert_eq!(s.snapshot.account_tests[ID].status, "match");
+    assert_eq!(
+        s.snapshot.account_history[0].test.bank_version.as_deref(),
+        Some("builtin")
+    );
     let requests = task.join().unwrap();
     assert_eq!(
         requests.iter().filter(|r| r.starts_with("POST ")).count(),
@@ -180,7 +185,7 @@ fn run_test(
     prompts: Vec<String>,
     _: impl FnMut(&mut Session),
 ) -> Result<Batch, String> {
-    reserve(s, id, model)?;
+    reserve(s, id, model, Some("builtin".into()))?;
     let challenges = prompts
         .into_iter()
         .enumerate()
@@ -200,10 +205,10 @@ fn three_slots_are_shared_and_old_jobs_cannot_overwrite_after_disconnect() {
         s.records.insert(format!("account-{i}"), record.clone());
     }
     for i in 0..3 {
-        reserve(&mut s, &format!("account-{i}"), "gpt-5.4").unwrap();
+        reserve(&mut s, &format!("account-{i}"), "gpt-5.4", None).unwrap();
     }
-    assert!(reserve(&mut s, "account-0", "gpt-5.4").is_err());
-    assert!(reserve(&mut s, "account-3", "gpt-5.4").is_err());
+    assert!(reserve(&mut s, "account-0", "gpt-5.4", None).is_err());
+    assert!(reserve(&mut s, "account-3", "gpt-5.4", None).is_err());
     assert!(!s.snapshot.busy);
     let mut job = job_session(&s, "account-0");
     job.snapshot
@@ -213,7 +218,7 @@ fn three_slots_are_shared_and_old_jobs_cannot_overwrite_after_disconnect() {
         .status = "match".into();
     remember(&mut job, "account-0");
     sync_job(&mut s, &job, "account-0").unwrap();
-    reserve(&mut s, "account-3", "gpt-5.4").unwrap();
+    reserve(&mut s, "account-3", "gpt-5.4", None).unwrap();
     let old = job_session(&s, "account-3");
     s.disconnect();
     assert!(sync_job(&mut s, &old, "account-3").is_err());
@@ -222,12 +227,12 @@ fn three_slots_are_shared_and_old_jobs_cannot_overwrite_after_disconnect() {
 #[test]
 fn history_keeps_active_jobs_when_new_completions_fill_the_list() {
     let mut s = session(1);
-    reserve(&mut s, ID, "gpt-5.4").unwrap();
+    reserve(&mut s, ID, "gpt-5.4", None).unwrap();
     let running = s.snapshot.account_tests[ID].run_id;
     for i in 0..12 {
         let id = format!("other-{i}");
         s.records.insert(id.clone(), s.records[ID].clone());
-        reserve(&mut s, &id, "gpt-5.4").unwrap();
+        reserve(&mut s, &id, "gpt-5.4", None).unwrap();
         s.snapshot.account_tests.get_mut(&id).unwrap().status = "error".into();
         remember(&mut s, &id);
     }
@@ -320,7 +325,7 @@ fn provider_requests_overlap_for_three_jobs_without_holding_management_lock() {
             let id = format!("account-{i}:idx-{i}");
             let mut job = {
                 let mut s = shared.lock().unwrap();
-                reserve(&mut s, &id, "gpt-5.4").unwrap();
+                reserve(&mut s, &id, "gpt-5.4", None).unwrap();
                 job_session(&s, &id)
             };
             let challenges = (0..3)
@@ -369,12 +374,12 @@ fn history_eviction_restores_a_test_entrypoint_and_final_shared_change_returns_e
     for i in 0..11 {
         let id = format!("finished-{i}");
         s.records.insert(id.clone(), s.records[ID].clone());
-        reserve(&mut s, &id, "gpt-5.4").unwrap();
+        reserve(&mut s, &id, "gpt-5.4", None).unwrap();
         s.snapshot.account_tests.get_mut(&id).unwrap().status = "unknown".into();
         remember(&mut s, &id);
     }
     assert!(!s.snapshot.account_tests.contains_key("finished-0"));
-    reserve(&mut s, ID, "gpt-5.4").unwrap();
+    reserve(&mut s, ID, "gpt-5.4", None).unwrap();
     s.snapshot.account_tests.get_mut(ID).unwrap().status = "analyzing".into();
     remember(&mut s, ID);
     let mut job = job_session(&s, ID);
@@ -389,7 +394,7 @@ fn history_eviction_restores_a_test_entrypoint_and_final_shared_change_returns_e
 #[test]
 fn historical_retry_rejects_replaced_account_or_disconnected_session() {
     let mut s = session(1);
-    let run = reserve(&mut s, ID, "gpt-5.4").unwrap();
+    let run = reserve(&mut s, ID, "gpt-5.4", None).unwrap();
     assert!(validate_retry(&s, ID, Some(run)).is_ok());
     assert!(validate_retry(&s, ID, Some(run + 1)).is_err());
     s.records.get_mut(ID).unwrap().row.name = "changed@example.invalid".into();

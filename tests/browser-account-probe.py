@@ -17,7 +17,7 @@ __TAURI_INTERNALS__.invoke=async(cmd,args)=>{
   __testCalls.push({cmd,args});
   const mode=accountMode,runId=++nextRun;
   const test={runId,credentialId:args.id,credential:__testSnapshot.credentials.find(c=>c.id===args.id).name,
-   model:args.model,status:'running',message:'采样中',at:Date.now()/1000};
+   model:args.model,bankVersion:args.bankVersion,status:'running',message:'采样中',at:Date.now()/1000};
   __testSnapshot.accountTests[args.id]=test;
   const entry={...test,samples:[]};__testSnapshot.accountHistory.unshift(entry);__testPublish();
   await new Promise(resolve=>pendingJobs.push(resolve));

@@ -7,6 +7,7 @@ import { Select } from "../../components/Select";
 import { Disclosure } from "../../components/Disclosure";
 import { ManualProbe } from "./ManualProbe";
 import { ProbeResult } from "./ProbeResult";
+import { ReferenceBank } from "./ReferenceBank";
 import type { ProbeState } from "./useProbe";
 import "../../styles/probe.css";
 export function ModelSelect({ state }: { state: ProbeState }) {
@@ -224,9 +225,8 @@ export function Probe(p: Props) {
             )
           )}
           <Disclosure title="检测提示词">
-            <div className="probe-status">
-              <span className="muted">LM Detector · 58 个参考模型</span>
-              {!s.manual && (
+            {!s.manual && (
+              <div className="probe-status">
                 <button
                   className="text-button"
                   disabled={s.busy}
@@ -234,8 +234,8 @@ export function Probe(p: Props) {
                 >
                   {s.answers.some((answer) => answer.trim()) ? "更换提示词并清空回答" : "新一组提示词"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {s.challenges.map((c, i) => (
               <div className="probe-sample" key={c.id}>
                 <div className="probe-status">
@@ -291,7 +291,7 @@ export function Probe(p: Props) {
         />
       )}
       <footer className="probe-foot">
-        <span>本机预览版 0.2.28</span>
+        <ReferenceBank notify={p.notify} />
       </footer>
     </section>
   );

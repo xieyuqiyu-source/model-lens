@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ManagementSnapshot } from "../credentials/data";
 import { native } from "../service/api";
 import { generateChallenges } from "./vendor/challenge.js";
-import { analyze, probeApi, type ExternalEntry, type ProbeModel } from "./api";
+import { analyze, currentBank, probeApi, type ExternalEntry, type ProbeModel } from "./api";
 import { collectSamples } from "./run";
 import type { Challenge, ProbeRecord, Sample } from "./analysis";
 export function useProbe(credentials: ManagementSnapshot) {
@@ -126,6 +126,8 @@ export function useProbe(credentials: ManagementSnapshot) {
     setResult(null);
     setAttempts(pasted);
     try {
+      const bank = await currentBank();
+      controller.signal.throwIfAborted();
       const collected = manual
         ? { samples: pasted, attempts: pasted, warnings: [] }
         : await collectSamples(
@@ -149,7 +151,7 @@ export function useProbe(credentials: ManagementSnapshot) {
         throw new Error(warnings.join("；") || "未取得有效回答");
       controller.signal.throwIfAborted();
       setPhase("本地分析中…");
-      const detection = await analyze(outputs, controller.signal);
+      const detection = await analyze(outputs, controller.signal, bank.version);
       if (!mounted.current || controller.signal.aborted) return;
       const record: ProbeRecord = {
         ...detection,

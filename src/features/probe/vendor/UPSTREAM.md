@@ -15,6 +15,8 @@
 
 `types.ts` 是同一提交 `shared/types.ts` 中 BankModel、Bank、Analysis、Output 的纯类型子集；两个 `.d.ts` 为 ModelLens 的 TypeScript 接入声明，不参与计算。
 
-Vite 直接编译 TypeScript，两个 JSON 原样作为本地资源打包。仅在分析时创建 Web Worker、加载并校验 JSON 哈希；计算结束即释放 Worker。没有检测网站请求、远程加载、自动更新或模型身份认证。三份有效样本且校准匹配时显示库内闭集置信度；一两份只排名；没有有效样本拒绝评分。
+Vite 直接编译 TypeScript，两个 JSON 原样作为内置库打包。使用内置库分析时创建 Web Worker、加载并校验 JSON 哈希，计算结束即释放 Worker。三份有效样本且校准匹配时显示库内闭集置信度，一两份只排名。
 
-更新时从同一完整上游 commit 整组更新六份文件，同步此表、worker 哈希与 provenance；运行 `pnpm test:ui` 与浏览器探查验收。不要单独替换数据、重写算法或混用校准版本。
+更新内置库时从同一个上游提交整组更新六份文件，同步此表、Worker 哈希与来源记录，运行 `pnpm test:ui` 与浏览器探查验收。
+
+从 0.2.29 起，运行时通过 [上游数据接口](https://lm.ikale.io/docs/sdk/data/) 下载配套的模型目录和二进制评分参数，使用 `lmfpd 0.2.0` 本地评分。独立更新的数据格式为 `lmfpd-data-v1` / `shared-detector-v2`。本页哈希对应安装包内置库。

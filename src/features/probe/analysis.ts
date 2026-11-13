@@ -4,7 +4,7 @@ import {
   type SharedDetector,
 } from "./vendor/shared-detector.ts";
 import { parseNumbers } from "./vendor/fingerprint-core.js";
-import type { Bank } from "./vendor/types.ts";
+import type { Analysis, Bank } from "./vendor/types.ts";
 export type Challenge = { id: string; prompt: string; expected_count: number };
 export type Sample = Challenge & {
   slot: number;
@@ -14,6 +14,12 @@ export type Sample = Challenge & {
   elapsedMs?: number;
 };
 export const detectorCommit = "4ffda94e5e24a05c4f55d6f14a1e27f4ef23c8f3";
+export type BankInfo = { builtAt: string; modelCount: number; version: string };
+export const builtinBank: BankInfo = {
+  builtAt: "2026-10-07T20:04:35.858118+00:00",
+  modelCount: 58,
+  version: "builtin",
+};
 export function sampleIssue(sample: Sample): string {
   if (sample.text.length > 20000) return "回答超过 20000 字符";
   if (sample.finish && sample.finish !== "stop") return "回答未正常结束";
@@ -24,16 +30,7 @@ export function sampleIssue(sample: Sample): string {
   if (numbers.every((n) => n >= 200)) return "数字分布异常（全部不小于 200）";
   return "";
 }
-export function analyzeSamples(
-  samples: Sample[],
-  bank: Bank,
-  artifact: SharedDetector,
-) {
-  if (
-    !supportsSharedDetector(bank, artifact) ||
-    bank.reference_sha256 !== artifact.source_reference_sha256
-  )
-    throw new Error("参考库与检测器不匹配");
+export function prepareSamples(samples: Sample[]) {
   if (
     samples.length > 3 ||
     !samples.length ||
@@ -57,15 +54,33 @@ export function analyzeSamples(
   });
   if (!accepted.length)
     throw new Error(warnings.join("；") || "未取得有效模型回答");
+  return { warnings, samples: accepted };
+}
+export function analyzeSamples(samples: Sample[], bank: Bank, artifact: SharedDetector) {
+  if (
+    !supportsSharedDetector(bank, artifact) ||
+    bank.reference_sha256 !== artifact.source_reference_sha256
+  )
+    throw new Error("参考库与检测器不匹配");
+  const prepared = prepareSamples(samples);
   return {
-    analysis: analyzeSharedOutputs(accepted, bank, artifact, {
+    ...prepared,
+    analysis: analyzeSharedOutputs(prepared.samples, bank, artifact, {
       allowPartial: true,
     }),
-    warnings,
-    samples: accepted,
+    referenceBank: builtinBank,
   };
 }
-export type Detection = ReturnType<typeof analyzeSamples>;
+export type Detection = {
+  warnings: string[];
+  samples: Sample[];
+  analysis: Pick<Analysis, "prediction" | "prediction_name" | "probability" |
+    "evidence" | "used_outputs" | "decision"> & {
+    results: Omit<Analysis["results"][number], "absolute_match">[];
+    probability_status?: string;
+  };
+  referenceBank: BankInfo;
+};
 export type ProbeRecord = Detection & {
   id: string;
   at: number;

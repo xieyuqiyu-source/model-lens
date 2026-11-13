@@ -17,6 +17,7 @@ window.__TAURI_INTERNALS__ = {
   if(cmd === 'plugin:event|listen') return 1;
   if(cmd === 'discover_services') return {services:[],checkedAt:1,statusKnown:false,warning:null};
   if(cmd === 'management_snapshot') return structuredClone(snapshot);
+  if(cmd === 'probe_reference_status') return {bank:{builtAt:'2026-10-07',modelCount:58,version:'builtin'},busy:false,message:'',revision:0};
   if(cmd === 'external_list') return ext.map(({key,...e})=>e);
   if(cmd === 'external_save') {
    if(args.key === 'bad') throw '第三方 API 认证失败，请检查 API Key';
