@@ -15,6 +15,11 @@ from urllib.request import urlopen
 from playwright.sync_api import Error, expect, sync_playwright
 
 
+def sample_text(slot):
+    slot %= 3
+    return ", ".join(str((i * (17 + slot * 6) + slot * 41) % 355 + 1) for i in range(300))
+
+
 class MockCpa(BaseHTTPRequestHandler):
     def do_GET(self):
         responses = {
@@ -31,12 +36,29 @@ class MockCpa(BaseHTTPRequestHandler):
         elif self.path not in responses:
             self.send_error(404)
         else:
-            body = json.dumps(responses[self.path]).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self.respond(responses[self.path])
+
+    def do_POST(self):
+        if self.path != "/v1/chat/completions":
+            return self.send_error(404)
+        if self.headers.get("Authorization") != "Bearer synthetic-client-key":
+            return self.send_error(401)
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if request.get("model") != "synthetic-model" or not request["messages"][0]["content"]:
+            return self.send_error(400)
+        answer = sample_text(self.server.samples)
+        self.server.samples += 1
+        self.respond({"model": "synthetic-model", "choices": [{
+            "message": {"content": answer}, "finish_reason": "stop",
+        }]})
+
+    def respond(self, value):
+        body = json.dumps(value).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 
 @contextmanager
@@ -111,6 +133,35 @@ def verify_ui(browser, page, port):
     tray = next(p for context in browser.contexts for p in context.pages if "view=tray" in p.url)
     expect(tray.get_by_role("button", name="打开主窗口")).to_be_visible()
     tray.get_by_role("button", name="打开主窗口").click()
+
+
+def verify_probe(page, server):
+    probe = page.get_by_role("region", name="模型探查")
+    result = probe.get_by_role("article", name="检测结果")
+    start = probe.get_by_role("button", name="开始检测", exact=True)
+    start.click()
+    expect(result).to_contain_text("3 / 3 有效样本", timeout=30000)
+    assert server.samples == 3
+
+    probe.get_by_role("button", name="手动检测", exact=True).click()
+    probe.get_by_role("textbox", name="模型回答 1", exact=True).fill(sample_text(0))
+    probe.get_by_role("button", name="开始评分", exact=True).click()
+    expect(result).to_contain_text("1 / 3 有效样本", timeout=30000)
+    assert server.samples == 3
+
+    probe.get_by_role("button", name="自动检测", exact=True).click()
+    probe.get_by_role("button", name="第三方 API", exact=True).click()
+    probe.get_by_role("button", name="添加第三方 API", exact=True).click()
+    form = page.get_by_role("dialog", name="添加第三方 API")
+    form.get_by_label("Base URL", exact=True).fill(f"http://127.0.0.1:{server.server_port}/v1")
+    form.get_by_label("API Key", exact=True).fill("synthetic-client-key")
+    form.get_by_role("button", name="保存并读取模型", exact=True).click()
+    expect(form).to_be_hidden(timeout=15000)
+    start.click()
+    expect(result).to_contain_text("3 / 3 有效样本", timeout=30000)
+    assert server.samples == 6
+    probe.get_by_role("button", name="CLIProxy", exact=True).click()
+    print("Windows CLIProxy 三次采样、手动评分及第三方 API 三次采样通过。", flush=True)
 
 
 def git_fixture(repo, *args):
@@ -275,6 +326,7 @@ def main(installer, expected_update):
     upstream, source, env = prepare_fixture(directory.parent / "ModelLens CPA Smoke") if not expected_update else (None, None, os.environ.copy())
 
     with webview_debug_port(port), ThreadingHTTPServer(("127.0.0.1", 0), MockCpa) as server, sync_playwright() as playwright:
+        server.samples = 0
         Thread(target=server.serve_forever, daemon=True).start()
         process = subprocess.Popen([str(executable)], env=env)
         try:
@@ -282,6 +334,7 @@ def main(installer, expected_update):
             verify_ui(browser, page, server.server_port)
             print(f"Windows {expected} 安装成功，CLIProxy、模型目录、剪贴板和托盘已核验。", flush=True)
             if not expected_update:
+                verify_probe(page, server)
                 verify_service(page, process.pid, upstream.parent, upstream, source)
             dialog = settings(page)
             expect(dialog.get_by_role("button", name="检查应用更新")).to_be_visible()
@@ -292,6 +345,7 @@ def main(installer, expected_update):
                 assert process.wait(timeout=120) == 0, "旧版 ModelLens 未正常退出"
                 browser, new = attach(playwright, endpoint, expected_update)
                 expect(new.get_by_role("button", name="选择模型：synthetic-model", exact=True)).to_be_visible(timeout=15000)
+                verify_probe(new, server)
                 expect(settings(new).get_by_text("ModelLens 已是最新版本", exact=True)).to_be_visible(timeout=30000)
                 print(f"签名更新 {expected} → {expected_update} 完成，已重启并恢复合成连接。")
             browser.close()
