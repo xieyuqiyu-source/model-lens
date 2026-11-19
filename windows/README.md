@@ -4,13 +4,13 @@
 
 ## 安装与使用
 
-1. 下载并运行 [ModelLens 0.2.31 Windows x64 安装包](https://www.ccoos.cn/modellens/windows/releases/0.2.31/ModelLens_0.2.31_x64-setup.exe)。安装程序会检查 Microsoft Edge WebView2 Runtime，有需要时联网安装。
+1. 下载并运行 [ModelLens 0.2.33 Windows x64 安装包](https://www.ccoos.cn/modellens/windows/releases/0.2.33/ModelLens_0.2.33_x64-setup.exe)。安装程序会检查 Microsoft Edge WebView2 Runtime，有需要时联网安装。
 2. 点击主窗口顶部的 CLIProxy 状态进入本机服务面板。可以安装官方源码，或通过「管理连接」连接已在本机运行的 CLIProxy。第三方 API 和手动检测可独立使用。
 3. 点击任务栏通知区域的 ModelLens 图标查看额度和快捷探查。右键菜单可打开主窗口或退出应用。
 
 Windows 版包括模型探查、指纹库更新、凭证管理、额度与外观设置。管理连接和第三方 API 记录保存到 `%LOCALAPPDATA%\io.modellens.desktop`。
 
-安装包有用于应用内自动更新的 Tauri 签名。首次运行安装程序时，Windows 可能显示 SmartScreen 提示，因为安装包当前没有 Authenticode 签名。可核对 [SHA-256](https://www.ccoos.cn/modellens/windows/releases/0.2.31/SHA256SUMS)。
+安装包有用于应用内自动更新的 Tauri 签名。首次运行安装程序时，Windows 可能显示 SmartScreen 提示，因为安装包当前没有 Authenticode 签名。可核对 [SHA-256](https://www.ccoos.cn/modellens/windows/releases/0.2.33/SHA256SUMS)。
 
 ## 安装和管理 CLIProxy
 

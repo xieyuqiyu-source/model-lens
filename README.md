@@ -4,7 +4,7 @@
 
 ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目录、比较采样结果和管理凭证，也可以从菜单栏快速确认各账号的额度与状态。应用使用 **Tauri 2 + Rust + React + TypeScript**，凭证操作由 Rust 后端处理，前端负责展示与交互。
 
-**当前发布版本：Apple Silicon Mac 0.2.32 · Windows x64 0.2.31 · 公开源码仓库**
+**当前发布版本：0.2.33 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
 
 [快速开始](#快速开始) · [Mac 应用更新](#mac-应用更新) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [最新验证记录](docs/verification-0.2.33.md)
 
@@ -57,7 +57,7 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 
 ### 1. 安装
 
-Apple Silicon Mac 用户可[下载 0.2.32 应用归档](https://www.ccoos.cn/modellens/macos/releases/0.2.32/ModelLens_0.2.32_aarch64.app.tar.gz)，解压后将 `ModelLens.app` 复制到个人「应用程序」目录。Windows 下载见 [Windows 安装与更新](windows/README.md)。
+Apple Silicon Mac 用户可[下载 0.2.33 应用归档](https://www.ccoos.cn/modellens/macos/releases/0.2.33/ModelLens_0.2.33_aarch64.app.tar.gz)，解压后将 `ModelLens.app` 复制到个人「应用程序」目录。Windows 下载见 [Windows 安装与更新](windows/README.md)。
 
 准备 Xcode Command Line Tools、Node.js 24、pnpm 10.10.0 和 Rust 1.89。当前项目使用锁文件固定依赖。
 
@@ -72,14 +72,14 @@ pnpm package
 
 #### Mac 应用更新
 
-0.2.32 起，应用在启动时和运行期间每 6 小时检查更新。发现新版后，主窗口顶部出现下载图标，也可在「外观与连接设置」点「检查应用更新」。点击「安装并重启」后，应用从「超级 Linux」下载并验证签名，替换应用后重启，保留本地连接和偏好。0.2.31 及以下需先手动替换一次应用。[更新源](https://www.ccoos.cn/modellens/macos/latest.json) · [SHA-256](https://www.ccoos.cn/modellens/macos/releases/0.2.32/SHA256SUMS)
+0.2.32 起，应用在启动时和运行期间每 6 小时检查更新。发现新版后，主窗口顶部出现下载图标，也可在「外观与连接设置」点「检查应用更新」。点击「安装并重启」后，应用从「超级 Linux」下载并验证签名，替换应用后重启，保留本地连接和偏好。0.2.31 及以下需先手动替换一次应用。[更新源](https://www.ccoos.cn/modellens/macos/latest.json) · [SHA-256](https://www.ccoos.cn/modellens/macos/releases/0.2.33/SHA256SUMS)
 
 Mac 发布使用本机 Apple Silicon 打包。校验应用签名后，从其父目录归档 `ModelLens.app`，并在持有 Mac 更新密钥的机器上签名与上传。将 `TAURI_SIGNING_PRIVATE_KEY_PATH` 设为 Mac 更新私钥路径。发布脚本需要 Python 3.11+、pnpm 和服务器 SSH 权限。
 
 ```sh
 pnpm package
 codesign --verify --deep --strict src-tauri/target/release/bundle/macos/ModelLens.app
-release_version=0.2.32
+release_version=0.2.33
 release_dir="release/artifacts/macos/$release_version"
 archive="$release_dir/ModelLens_${release_version}_aarch64.app.tar.gz"
 mkdir -p "$release_dir"
