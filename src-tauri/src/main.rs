@@ -1,11 +1,19 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
+#[cfg(target_os = "macos")]
 mod discovery;
 mod management;
 mod reference_bank;
+#[cfg(windows)]
+#[path = "../../windows/native.rs"]
+mod windows;
+#[cfg(target_os = "macos")]
 use std::sync::Mutex;
+#[cfg(target_os = "macos")]
+use tauri::window::{Effect, EffectState, EffectsBuilder};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    window::{Effect, EffectState, EffectsBuilder},
     Emitter, Manager,
 };
 
@@ -24,7 +32,9 @@ fn set_appearance(app: tauri::AppHandle, mode: AppearanceMode) {
         AppearanceMode::System => None,
     });
 }
+#[cfg(target_os = "macos")]
 struct DiscoveryLock(Mutex<()>);
+#[cfg(target_os = "macos")]
 #[tauri::command]
 async fn discover_services(app: tauri::AppHandle) -> Result<discovery::Snapshot, String> {
     let data = app
@@ -68,6 +78,9 @@ fn open_tray(app: tauri::AppHandle) -> Result<(), String> {
     let rect = app
         .tray_by_id("main-tray")
         .and_then(|t| t.rect().ok().flatten());
+    #[cfg(windows)]
+    windows::position_tray(&window, rect)?;
+    #[cfg(not(windows))]
     if let Some(rect) = rect {
         let scale = window.scale_factor().unwrap_or(1.0);
         let position = rect.position.to_logical::<f64>(scale);
@@ -87,6 +100,7 @@ fn open_tray(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 fn main() {
+    #[cfg(target_os = "macos")]
     if std::env::args().any(|s| s == "--discovery-check") {
         let dir = std::env::temp_dir().join("modellens-discovery-check");
         match discovery::scan(dir) {
@@ -98,14 +112,19 @@ fn main() {
         }
         return;
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(DiscoveryLock(Mutex::new(())));
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)
         }))
-        .manage(DiscoveryLock(Mutex::new(())))
         .manage(management::Management::default())
         .manage(reference_bank::BankState::default())
         .invoke_handler(tauri::generate_handler![
+            #[cfg(target_os = "macos")]
             discover_services,
             set_appearance,
             open_main,
@@ -125,12 +144,19 @@ fn main() {
             management::credential_delete,
             management::quota_refresh,
             management::groups::quota_refresh_group,
+            #[cfg(target_os = "macos")]
             management::cpa::cpa_open_management,
+            #[cfg(target_os = "macos")]
             management::cpa::cpa_pull,
+            #[cfg(target_os = "macos")]
             management::cpa::versions::cpa_versions,
+            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_job,
+            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_set_running,
+            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_install,
+            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_choose_directory,
             management::probe::probe_models,
             management::probe::probe_sample,
@@ -159,20 +185,20 @@ fn main() {
             .title("ModelLens 快捷面板")
             .inner_size(400.0, 270.0)
             .resizable(false)
-            .decorations(false)
-            .transparent(true)
-            .shadow(true)
-            .effects(
+            .decorations(false);
+            #[cfg(target_os = "macos")]
+            let tray_window = tray_window.transparent(true).shadow(true).effects(
                 EffectsBuilder::new()
                     .effect(Effect::Menu)
                     .state(EffectState::Active)
                     .radius(13.0)
                     .build(),
-            )
-            .visible(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .build()?;
+            );
+            let tray_window = tray_window
+                .visible(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .build()?;
             tray_window.on_window_event({
                 let window = tray_window.clone();
                 move |event| {
@@ -182,10 +208,12 @@ fn main() {
                 }
             });
             TrayIconBuilder::with_id("main-tray")
-                .icon(tauri::image::Image::from_bytes(include_bytes!(
-                    "../icons/tray.png"
-                ))?)
-                .icon_as_template(true)
+                .icon(tauri::image::Image::from_bytes(if cfg!(windows) {
+                    include_bytes!("../icons/icon.png").as_slice()
+                } else {
+                    include_bytes!("../icons/tray.png").as_slice()
+                })?)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("ModelLens · 模型透镜")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -215,14 +243,14 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("ModelLens 启动失败")
-        .run(|app, event| {
+        .run(|_app, _event| {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {
                 has_visible_windows: false,
                 ..
-            } = event
+            } = _event
             {
-                show_main(app);
+                show_main(_app);
             }
         });
 }

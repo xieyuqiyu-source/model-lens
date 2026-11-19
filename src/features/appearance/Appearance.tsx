@@ -1,4 +1,5 @@
 import { Check, Moon, Sun, Monitor, Plug } from "lucide-react";
+import type { ReactNode } from "react";
 import { Modal } from "../../components/Common";
 import tokens from "./tokens.json";
 import type { AppearanceMode, Palette, AppearancePreference } from "./preferences";
@@ -8,9 +9,10 @@ const palettes: { id: Palette; name: string; detail: string }[] = [
   { id: "iris", name: "鸢尾紫", detail: "柔和 · 鲜明" },
 ];
 const modes = [{ id: "light", name: "浅色", Icon: Sun }, { id: "dark", name: "深色", Icon: Moon }, { id: "system", name: "跟随系统", Icon: Monitor }] as const;
-export function Appearance({ preference, update, error, onClose, onConnect, compact }: {
+export function Appearance({ preference, update, error, onClose, onConnect, compact, children }: {
   preference: AppearancePreference; update: (next: AppearancePreference) => void;
   error: string; onClose: () => void; onConnect: () => void; compact: boolean;
+  children?: ReactNode;
 }) {
   function mode(value: AppearanceMode) { update({ ...preference, mode: value }); }
   return <Modal title="外观设置" onClose={onClose}>
@@ -27,6 +29,7 @@ export function Appearance({ preference, update, error, onClose, onConnect, comp
       </div>
       {error && <p role="status" className="quota-message has-error">{error}</p>}
       {!compact && <button className="text-button" onClick={onConnect}><Plug size={14} />管理 CLIProxy 连接</button>}
+      {children}
     </div>
   </Modal>;
 }

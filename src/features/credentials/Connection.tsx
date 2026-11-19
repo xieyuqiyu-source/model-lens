@@ -8,7 +8,7 @@ export function Connection({
 }: {
   state: CredentialsState;
   onClose: () => void;
-  onInspect: () => void;
+  onInspect?: () => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const [port, setPort] = useState(String(state.port || 8317));
@@ -67,7 +67,7 @@ export function Connection({
               />
             </label>
             <p className="muted">
-              密钥仅存本机文件，仅当前用户可读写；断开连接保留记录。
+              {onInspect ? "密钥仅存本机文件，仅当前用户可读写；断开连接保留记录。" : "密钥保存在当前用户的本机应用数据目录；断开连接保留记录。"}
             </p>
             {state.error && (
               <p className="notice" role="alert">
@@ -75,9 +75,9 @@ export function Connection({
               </p>
             )}
             <div className="modal-actions">
-              <button type="button" className="text-button" onClick={onInspect}>
+              {onInspect && <button type="button" className="text-button" onClick={onInspect}>
                 查看服务位置
-              </button>
+              </button>}
               <div className="actions">
                 {state.connected && (
                   <button

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { createWorkspaceMotion } from "./components/workspaceMotion";
-import { History, Settings, RefreshCw, ArrowUpRight, Scan, Palette } from "lucide-react";
+import { History, Settings, RefreshCw, ArrowUpRight, Scan, Palette, Download } from "lucide-react";
 import { Segment } from "./components/Segment";
 import { Toast } from "./components/Toast";
 import { Logo, Modal } from "./components/Common";
@@ -22,6 +22,8 @@ import { useAccountProbe } from "./features/probe/useAccountProbe";
 import { useProbe } from "./features/probe/useProbe";
 import { ProbeHistory } from "./features/probe/ProbeHistory";
 import { openMain, openTray, closeTray, native } from "./features/service/api";
+import { windowsDesktop } from "../windows/platform";
+import { UpdateNotice, useWindowsUpdate } from "../windows/UpdateNotice";
 function readPreference(key: string, fallback: string) {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -67,6 +69,7 @@ export default function App() {
   const accountProbe = useAccountProbe(credentials, probe.external ? "" : probe.model?.id ?? "", setToast, runId => { setAccountHistoryId(runId); setModal("history"); });
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
+  const appUpdate = useWindowsUpdate(windowsDesktop && !isTray);
   useEffect(() => {
     if (!isTray) return;
     const dismiss = (event: KeyboardEvent) => {
@@ -87,7 +90,16 @@ export default function App() {
     probe.setSource("cliproxy");
     changeFocus("probe");
   };
-  const status = (
+  const connect = () => {
+    if (isTray) void openMain();
+    else setModal("connection");
+  };
+  const status = windowsDesktop ? (
+    <button className="service-status" onClick={connect}>
+      <i className={credentials.connected && !credentials.stale ? "online" : ""} />
+      {credentials.stale ? "CLIProxy 连接异常" : credentials.connected ? "CLIProxy 已连接" : "连接 CLIProxy"}
+    </button>
+  ) : (
     <button
       className="service-status"
       onClick={() => setModal("service")}
@@ -103,14 +115,11 @@ export default function App() {
             : "CLIProxy 未运行"}
     </button>
   );
-  const connect = () => {
-    if (isTray) void openMain();
-    else setModal("connection");
-  };
   const rows = <CredentialRows state={credentials} onConnect={connect} accountProbe={accountProbe} />;
   return (
     <div
       className={isTray ? "tray-app" : "app"}
+      data-windows={windowsDesktop}
       data-keyboard-focus={keyboardFocus}
       onPointerDownCapture={() => setKeyboardFocus(false)}
     >
@@ -161,14 +170,20 @@ export default function App() {
             />
             <div className="titlebar-right">
               {status}
-              <button
+              {!windowsDesktop && <button
                 className="icon-button"
                 aria-label="刷新进程状态"
                 disabled={services.busy}
                 onClick={() => void services.refresh()}
               >
                 <RefreshCw className={services.busy ? "spin" : ""} />
-              </button>
+              </button>}
+              {appUpdate.version && <button
+                className="icon-button"
+                aria-label={`ModelLens ${appUpdate.version} 更新`}
+                title={`ModelLens ${appUpdate.version} 更新`}
+                onClick={() => setModal("appearance")}
+              ><Download size={15} /></button>}
               <button
                 className="icon-button"
                 aria-label="历史"
@@ -210,7 +225,7 @@ export default function App() {
               onTray={() => {
                 if (native)
                   void openTray().catch(() =>
-                    setToast("快捷面板打开失败，请从菜单栏重试。"),
+                    setToast(windowsDesktop ? "快捷面板打开失败，请从系统托盘重试。" : "快捷面板打开失败，请从菜单栏重试。"),
                   );
                 else setModal("tray");
               }}
@@ -218,12 +233,14 @@ export default function App() {
           </main>
         </>
       )}
-      {modal === "appearance" && <Appearance {...appearance} compact={isTray} onClose={() => setModal("")} onConnect={() => setModal("connection")} />}
+      {modal === "appearance" && <Appearance {...appearance} compact={isTray} onClose={() => setModal("")} onConnect={() => setModal("connection")}>
+        {windowsDesktop && !isTray && <UpdateNotice update={appUpdate} appBusy={credentials.busy || probe.busy || accountProbe.activeCount > 0} />}
+      </Appearance>}
       {modal === "connection" && (
         <Connection
           state={credentials}
           onClose={() => setModal("")}
-          onInspect={() => setModal("service")}
+          onInspect={windowsDesktop ? undefined : () => setModal("service")}
         />
       )}
       {modal === "service" && (

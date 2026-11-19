@@ -1,0 +1,51 @@
+{
+  "app": {
+    "macOSPrivateApi": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "ModelLens · 模型透镜",
+        "width": 1120,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 720,
+        "backgroundColor": "#FDFEFD",
+        "center": true
+      }
+    ],
+    "security": {
+      "capabilities": [
+        "desktop",
+        {
+          "identifier": "windows-updater",
+          "description": "Windows 主窗口可以检查和安装已签名的应用更新",
+          "local": true,
+          "platforms": ["windows"],
+          "windows": [
+            "main"
+          ],
+          "permissions": [
+            "updater:allow-check",
+            "updater:allow-download-and-install"
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "../windows/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3MThGQzFERUMxOTMyMQpSV1FoazhIZXdZOXhDM29ML3RiandlOXZvd3hVU2Q0aWtsaUMyUkkyS1JreDc4SVE2TFBpWXdJago=",
+      "endpoints": [
+        "https://www.ccoos.cn/modellens/windows/latest.json"
+      ]
+    }
+  }
+}

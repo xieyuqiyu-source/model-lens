@@ -19,6 +19,7 @@ import { CredentialTools } from "./CredentialTools";
 import { BatchDeleteDialog } from "./BatchDeleteDialog";
 import { DeleteDialog } from "./DeleteDialog";
 import { GroupTabs } from "./GroupTabs";
+import { windowsDesktop } from "../../../windows/platform";
 import { inGroup } from "./groups";
 type Props = {
   accountProbe: AccountProbeState;
@@ -207,7 +208,7 @@ export function Credentials(p: Props) {
           </div>
           <button className="text-button tray-link" onClick={p.onTray}>
             <PanelTop size={16} />
-            菜单栏快捷入口
+            {windowsDesktop ? "系统托盘快捷入口" : "菜单栏快捷入口"}
             <ArrowUpRight size={14} />
           </button>
         </>

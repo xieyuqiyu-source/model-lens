@@ -19,12 +19,12 @@ impl LocalFile {
     pub(super) fn for_app(app: &tauri::AppHandle) -> Result<Self, String> {
         Self::named(app, "connection.json")
     }
-    /// A private 0600 JSON file in this app's data directory.
+    /// A JSON file in this app's per-user data directory.
     pub(super) fn named(app: &tauri::AppHandle, name: &str) -> Result<Self, String> {
         use tauri::Manager;
         let directory = app
             .path()
-            .app_data_dir()
+            .app_local_data_dir()
             .map_err(|_| "无法定位本机连接目录")?;
         Ok(Self {
             path: directory.join(name),
@@ -43,16 +43,22 @@ impl LocalFile {
             use std::os::unix::fs::OpenOptionsExt;
             options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(0x00200000); // FILE_FLAG_OPEN_REPARSE_POINT
+        }
         let file = match options.open(&self.path) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err("无法读取本机连接文件，请检查数据目录权限或重新输入密钥".into()),
         };
-        if !file
-            .metadata()
-            .map_err(|_| "无法读取本机连接文件")?
-            .is_file()
-        {
+        let metadata = file.metadata().map_err(|_| "无法读取本机连接文件")?;
+        if !metadata.is_file() {
+            return Err("本机连接记录无效，请忘记后重新连接".into());
+        }
+        #[cfg(windows)]
+        if crate::windows::is_reparse_point(&metadata) {
             return Err("本机连接记录无效，请忘记后重新连接".into());
         }
         #[cfg(unix)]
@@ -81,7 +87,12 @@ impl LocalFile {
                 builder.mode(0o700);
             }
             builder.create(directory)?;
-            if !fs::symlink_metadata(directory)?.file_type().is_dir() {
+            let metadata = fs::symlink_metadata(directory)?;
+            if !metadata.is_dir() {
+                return Err("invalid connection directory".into());
+            }
+            #[cfg(windows)]
+            if crate::windows::is_reparse_point(&metadata) {
                 return Err("invalid connection directory".into());
             }
             #[cfg(unix)]

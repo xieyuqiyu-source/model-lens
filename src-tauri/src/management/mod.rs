@@ -1,5 +1,6 @@
 pub mod access;
 pub mod batch;
+#[cfg(target_os = "macos")]
 pub mod cpa;
 pub mod groups;
 pub(crate) mod local_connection;

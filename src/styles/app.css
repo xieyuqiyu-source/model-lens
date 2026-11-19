@@ -95,6 +95,8 @@ h3 {
   border-bottom: 1px solid var(--line);
   user-select: none;
 }
+.app[data-windows="true"] .titlebar { padding-left: 24px; }
+.tray-app[data-windows="true"] { border-radius: 0; }
 .logo {
   display: flex;
   align-items: center;

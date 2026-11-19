@@ -34,9 +34,9 @@ fn clipboard(value: &str) -> Result<(), String> {
     }
     Ok(())
 }
-#[cfg(not(target_os = "macos"))]
-fn clipboard(_: &str) -> Result<(), String> {
-    Err("当前平台尚未接入密钥复制".into())
+#[cfg(windows)]
+fn clipboard(value: &str) -> Result<(), String> {
+    clipboard_win::set_clipboard_string(value).map_err(|_| "无法写入剪贴板".into())
 }
 
 #[tauri::command]
