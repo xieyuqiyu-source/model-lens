@@ -6,7 +6,7 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 
 **当前版本：0.2.30 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
 
-[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md)
+[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.30.md)
 
 ## 界面预览
 
