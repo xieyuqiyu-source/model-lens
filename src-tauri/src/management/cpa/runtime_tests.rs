@@ -72,7 +72,7 @@ exit 1
         )
         .unwrap();
     fs::set_permissions(staged.path(), fs::Permissions::from_mode(0o700)).unwrap();
-    let error = replace_and_restart(&layout, staged).unwrap_err();
+    let error = replace_and_restart(&layout, staged.into_temp_path(), pid).unwrap_err();
     assert!(error.contains("已恢复原程序"), "{error}");
     assert_eq!(
         fs::read_to_string(&layout.config).unwrap(),
@@ -183,10 +183,10 @@ fn root_layout_build_staging_does_not_dirty_go_metadata() {
         port: 20000,
     };
     let staged = build(&layout).unwrap();
-    assert!(!staged.path().starts_with(&repo));
+    assert!(!staged.starts_with(&repo));
     let output = Command::new(go().unwrap())
         .args(["version", "-m"])
-        .arg(staged.path())
+        .arg(&*staged)
         .output()
         .unwrap();
     assert!(output.status.success());

@@ -7,7 +7,7 @@ use super::Management;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
     time::Duration,
 };
 use tauri::Manager;
@@ -37,30 +37,52 @@ fn management_url(port: u16) -> String {
 pub async fn cpa_open_management(app: tauri::AppHandle) -> Result<(), String> {
     let port = connected_port(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        Command::new("/usr/bin/open")
-            .arg(management_url(port))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|_| "无法打开默认浏览器")?
-            .success()
-            .then_some(())
-            .ok_or("CPA 管理页未能打开".into())
+        #[cfg(windows)]
+        return crate::windows::cpa::open_browser(&management_url(port));
+        #[cfg(target_os = "macos")]
+        {
+            use std::process::Stdio;
+            Command::new("/usr/bin/open")
+                .arg(management_url(port))
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|_| "无法打开默认浏览器")?
+                .success()
+                .then_some(())
+                .ok_or("CPA 管理页未能打开".into())
+        }
     })
     .await
     .map_err(|_| "打开管理页未完成".to_owned())?
 }
 
 // Only Git children created here are terminated on timeout; never the running CPA.
+fn git_executable() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    return Ok("/usr/bin/git".into());
+    #[cfg(windows)]
+    crate::windows::cpa::tool(
+        "git.exe",
+        &[
+            ("ProgramFiles", "Git/cmd"),
+            ("LOCALAPPDATA", "Programs/Git/cmd"),
+        ],
+    )
+    .ok_or("未找到 Git for Windows，请安装 Git 并重启 ModelLens".into())
+}
 fn git(path: &Path, args: &[&str], timeout: Duration) -> Result<String, String> {
-    use std::os::unix::process::CommandExt;
-    let mut command = Command::new("/usr/bin/git");
+    let mut command = Command::new(git_executable()?);
     command
         .current_dir(path)
         .args([
             "-c",
-            "core.hooksPath=/dev/null",
+            if cfg!(windows) {
+                "core.hooksPath=NUL"
+            } else {
+                "core.hooksPath=/dev/null"
+            },
             "-c",
             "submodule.recurse=false",
             "-c",
@@ -70,14 +92,18 @@ fn git(path: &Path, args: &[&str], timeout: Duration) -> Result<String, String> 
         ])
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_SSH_COMMAND", "/usr/bin/ssh -oBatchMode=yes")
+        .env("GCM_INTERACTIVE", "Never")
+        .env(
+            "GIT_SSH_COMMAND",
+            if cfg!(windows) {
+                "ssh -oBatchMode=yes"
+            } else {
+                "/usr/bin/ssh -oBatchMode=yes"
+            },
+        )
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0);
+        .env_remove("GIT_INDEX_FILE");
     process::output(command, timeout)
 }
 
@@ -182,7 +208,7 @@ pub async fn cpa_pull(
 ) -> Result<String, String> {
     let port = connected_port(&app)?;
     jobs::run(app, move |app| {
-        let executable = crate::discovery::connected_executable(port)?;
+        let (executable, pid) = crate::discovery::connected_process(port)?;
         if expected_executable
             .as_deref()
             .is_some_and(|expected| Path::new(expected) != executable)
@@ -193,13 +219,16 @@ pub async fn cpa_pull(
         let _repository = versions::REPOSITORY_ACCESS
             .lock()
             .map_err(|_| "CPA 仓库状态不可用")?;
+        if crate::discovery::connected_process(port)? != (executable.clone(), pid) {
+            return Err("原 CPA 进程已变化，请重新检测".into());
+        }
         jobs::update_result(app, None);
         jobs::phase(app, "$ git fetch → merge --ff-only · 正在获取更新…");
         let result = pull(&layout.repository)?;
         jobs::phase(app, "$ go build ./cmd/server · 正在编译，原服务继续运行…");
         let staged = runtime::build(&layout)?;
-        jobs::phase(app, "$ SIGTERM → CPA --config config.yaml · 正在更新重启…");
-        runtime::replace_and_restart(&layout, staged)?;
+        jobs::phase(app, "$ CPA --config config.yaml · 正在更新重启…");
+        runtime::replace_and_restart(&layout, staged, pid)?;
         jobs::update_result(
             app,
             Some((

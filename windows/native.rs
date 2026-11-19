@@ -1,4 +1,6 @@
 use std::{fs::Metadata, os::windows::fs::MetadataExt};
+#[path = "cpa.rs"]
+pub(crate) mod cpa;
 use tauri::{PhysicalPosition, PhysicalRect, Rect, WebviewWindow};
 
 pub(crate) fn is_reparse_point(metadata: &Metadata) -> bool {

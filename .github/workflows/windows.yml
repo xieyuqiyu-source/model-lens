@@ -49,6 +49,10 @@ jobs:
           rustup override set 1.89.0
           rustup target add x86_64-pc-windows-msvc
           pnpm install --frozen-lockfile
+      - id: app-version
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
       - id: rust-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -56,6 +60,7 @@ jobs:
             ~/.cargo/registry
             windows/target
           key: windows-x64-rust-1.89-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: windows-x64-rust-1.89-
       - name: Build Windows NSIS installer
         if: ${{ !inputs.verify_update }}
         run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-pc-windows-msvc --config windows/tauri.conf.json -- --locked
@@ -70,7 +75,7 @@ jobs:
         if: ${{ !inputs.verify_update }}
         with:
           name: modellens-windows-x64
-          path: windows/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+          path: windows/target/x86_64-pc-windows-msvc/release/bundle/nsis/ModelLens_${{ steps.app-version.outputs.version }}_x64-setup.exe
           if-no-files-found: error
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: ${{ !inputs.verify_update && steps.rust-cache.outputs.cache-hit != 'true' }}

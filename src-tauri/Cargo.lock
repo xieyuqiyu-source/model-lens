@@ -2236,10 +2236,11 @@ dependencies = [
 
 [[package]]
 name = "model-lens"
-version = "0.2.30"
+version = "0.2.31"
 dependencies = [
  "chrono",
  "clipboard-win",
+ "dunce",
  "libc",
  "lmfpd",
  "objc2",
@@ -2255,6 +2256,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "unicode-normalization",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

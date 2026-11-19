@@ -1,14 +1,11 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-#[cfg(target_os = "macos")]
 mod discovery;
 mod management;
 mod reference_bank;
 #[cfg(windows)]
 #[path = "../../windows/native.rs"]
 mod windows;
-#[cfg(target_os = "macos")]
-use std::sync::Mutex;
 #[cfg(target_os = "macos")]
 use tauri::window::{Effect, EffectState, EffectsBuilder};
 use tauri::{
@@ -32,22 +29,15 @@ fn set_appearance(app: tauri::AppHandle, mode: AppearanceMode) {
         AppearanceMode::System => None,
     });
 }
-#[cfg(target_os = "macos")]
-struct DiscoveryLock(Mutex<()>);
-#[cfg(target_os = "macos")]
 #[tauri::command]
 async fn discover_services(app: tauri::AppHandle) -> Result<discovery::Snapshot, String> {
     let data = app
         .path()
         .app_data_dir()
         .map_err(|_| "无法定位应用数据目录")?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<DiscoveryLock>();
-        let _lock = state.0.lock().map_err(|_| "进程检查暂时不可用")?;
-        discovery::scan(data)
-    })
-    .await
-    .map_err(|_| "进程检查未完成".to_owned())?
+    tauri::async_runtime::spawn_blocking(move || discovery::scan(data))
+        .await
+        .map_err(|_| "进程检查未完成".to_owned())?
 }
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -116,15 +106,12 @@ fn main() {
         tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)
         }));
-    #[cfg(target_os = "macos")]
-    let builder = builder.manage(DiscoveryLock(Mutex::new(())));
     #[cfg(windows)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .manage(management::Management::default())
         .manage(reference_bank::BankState::default())
         .invoke_handler(tauri::generate_handler![
-            #[cfg(target_os = "macos")]
             discover_services,
             set_appearance,
             open_main,
@@ -144,19 +131,12 @@ fn main() {
             management::credential_delete,
             management::quota_refresh,
             management::groups::quota_refresh_group,
-            #[cfg(target_os = "macos")]
             management::cpa::cpa_open_management,
-            #[cfg(target_os = "macos")]
             management::cpa::cpa_pull,
-            #[cfg(target_os = "macos")]
             management::cpa::versions::cpa_versions,
-            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_job,
-            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_set_running,
-            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_install,
-            #[cfg(target_os = "macos")]
             management::cpa::jobs::cpa_choose_directory,
             management::probe::probe_models,
             management::probe::probe_sample,

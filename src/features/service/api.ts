@@ -5,6 +5,8 @@ export type Service = {
   workingDirectory: string | null;
   lastSeen: number;
   pid: number | null;
+  externallyManaged?: boolean;
+  multipleInstances?: boolean;
 };
 export type Snapshot = {
   services: Service[];

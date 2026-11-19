@@ -1,5 +1,4 @@
 import { CpaActions } from "../service/CpaActions";
-import { windowsDesktop } from "../../../windows/platform";
 import { useRef, useState } from "react";
 import { Toggle } from "../../components/Common";
 import type { Credential } from "./data";
@@ -31,7 +30,7 @@ export function CredentialTools({ state: s, selected, onSelect, onDelete, rows, 
     {s.connected && <div className="proxy-access">
       <button className="text-button proxy-url" disabled={blocked} onClick={() => void copy(false)}>{url}</button>
       <button className="text-button proxy-url" disabled={blocked} aria-label="复制 API Key" onClick={() => void copy(true)}>API Key</button>
-      {!windowsDesktop && <CpaActions connected={s.connected} />}
+      <CpaActions connected={s.connected} />
       <span className="muted copy-status" role="status">{notice}</span>
     </div>}
     {groups}

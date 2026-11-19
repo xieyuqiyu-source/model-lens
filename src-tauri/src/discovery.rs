@@ -1,12 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    io::Read,
+    io::Write,
     path::{Path, PathBuf},
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
+#[cfg(target_os = "macos")]
+use std::{
+    io::Read,
     process::{Command, Stdio},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
+static CACHE_ACCESS: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +29,8 @@ pub struct Service {
     #[serde(flatten)]
     pub location: Remembered,
     pub pid: Option<u32>,
+    pub externally_managed: bool,
+    pub multiple_instances: bool,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,18 +49,31 @@ fn now() -> u64 {
 }
 
 // Only executable names are inspected: command arguments and environment can contain secrets.
+#[cfg(target_os = "macos")]
 pub fn parse_process(line: &str) -> Option<(u32, String)> {
     let line = line.trim();
     let split = line.find(char::is_whitespace)?;
     let pid = line[..split].parse().ok()?;
     let path = line[split..].trim();
-    let p = Path::new(path);
+    is_cpa(Path::new(path)).then(|| (pid, path.to_owned()))
+}
+fn is_cpa(p: &Path) -> bool {
     if !p.is_absolute() {
-        return None;
+        return false;
     }
-    let name = p.file_name()?.to_str()?.to_ascii_lowercase();
+    let Some(name) = p
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_ascii_lowercase)
+    else {
+        return false;
+    };
+    #[cfg(windows)]
+    let name = name.strip_suffix(".exe").unwrap_or("");
+    #[cfg(not(windows))]
+    let name = name.as_str();
     let known = matches!(
-        name.as_str(),
+        name,
         "cliproxyapi" | "cli-proxy-api" | "cliproxy" | "cliproxyapi-plus" | "cli-proxy-api-plus"
     );
     let dev_cpa = name == "cpa"
@@ -59,8 +81,9 @@ pub fn parse_process(line: &str) -> Option<(u32, String)> {
             a.file_name()
                 .is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case("cliproxy"))
         });
-    (known || dev_cpa).then(|| (pid, path.to_owned()))
+    known || dev_cpa
 }
+#[cfg(target_os = "macos")]
 pub(crate) fn command_output(program: &str, args: &[&str]) -> Result<String, String> {
     let mut child = Command::new(program)
         .args(args)
@@ -101,6 +124,7 @@ pub(crate) fn command_output(program: &str, args: &[&str]) -> Result<String, Str
     }
     String::from_utf8(bytes).map_err(|_| "系统返回了无法识别的路径".into())
 }
+#[cfg(target_os = "macos")]
 pub(crate) fn working_directory(pid: u32) -> Option<String> {
     let output = command_output(
         "/usr/sbin/lsof",
@@ -113,7 +137,8 @@ pub(crate) fn working_directory(pid: u32) -> Option<String> {
             .map(str::to_owned)
     })
 }
-pub fn connected_executable(port: u16) -> Result<PathBuf, String> {
+#[cfg(target_os = "macos")]
+pub fn connected_process(port: u16) -> Result<(PathBuf, u32), String> {
     let listeners = command_output(
         "/usr/sbin/lsof",
         &["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-Fp"],
@@ -129,7 +154,27 @@ pub fn connected_executable(port: u16) -> Result<PathBuf, String> {
     if matches.len() != 1 {
         return Err("无法唯一确认当前连接对应的 CPA 进程".into());
     }
-    Ok(PathBuf::from(&matches[0].1))
+    Ok((PathBuf::from(&matches[0].1), matches[0].0))
+}
+#[cfg(windows)]
+pub fn connected_process(port: u16) -> Result<(PathBuf, u32), String> {
+    let pids = crate::windows::cpa::listeners(port)?;
+    let [pid] = pids.as_slice() else {
+        return Err("无法唯一确认当前连接对应的 CPA 进程".into());
+    };
+    let executable = crate::windows::cpa::executable(*pid)
+        .filter(|path| is_cpa(path))
+        .ok_or("占用端口的不是可识别 CPA")?;
+    let active = crate::windows::cpa::processes()?;
+    if active
+        .iter()
+        .filter(|(_, path)| Path::new(path) == executable)
+        .count()
+        != 1
+    {
+        return Err("同一个 CPA 程序存在多个进程，请先从原启动入口处理".into());
+    }
+    Ok((executable, *pid))
 }
 fn project_directory(executable: &str) -> String {
     let parent = Path::new(executable).parent().unwrap_or(Path::new("/"));
@@ -153,48 +198,57 @@ fn read_cache(path: &Path) -> Result<Vec<Remembered>, String> {
 fn save_cache(path: &Path, records: &[Remembered]) -> Result<(), String> {
     let parent = path.parent().ok_or("数据目录无效")?;
     fs::create_dir_all(parent).map_err(|_| "无法创建本地数据目录")?;
-    let temp = path.with_extension("tmp");
     let bytes = serde_json::to_vec_pretty(records).map_err(|_| "无法保存服务位置")?;
     #[cfg(unix)]
     {
-        use std::io::Write;
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
             .map_err(|_| "无法保护本地数据目录")?;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temp)
-            .map_err(|_| "无法保存服务位置")?;
-        file.write_all(&bytes)
-            .and_then(|_| file.sync_all())
-            .map_err(|_| "写入服务位置失败")?;
     }
-    #[cfg(not(unix))]
-    fs::write(&temp, bytes).map_err(|_| "无法保存服务位置")?;
-    fs::rename(temp, path).map_err(|_| "无法更新已记住的位置".into())
+    let mut file = tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法保存服务位置")?;
+    file.write_all(&bytes)
+        .and_then(|_| file.as_file().sync_all())
+        .map_err(|_| "写入服务位置失败")?;
+    file.persist(path).map_err(|_| "无法更新已记住的位置")?;
+    Ok(())
+}
+fn externally_managed(_executable: &str) -> bool {
+    #[cfg(windows)]
+    return crate::windows::cpa::externally_managed(Path::new(_executable));
+    #[cfg(not(windows))]
+    false
 }
 fn merge(remembered: Vec<Remembered>, live: &[(u32, Remembered)]) -> Vec<Service> {
-    let mut services: Vec<Service> = live
-        .iter()
-        .map(|(pid, r)| Service {
-            location: r.clone(),
-            pid: Some(*pid),
-        })
-        .collect();
+    let mut services: Vec<Service> = Vec::new();
+    for (pid, r) in live {
+        if let Some(previous) = services
+            .iter_mut()
+            .find(|s| s.location.executable == r.executable)
+        {
+            previous.multiple_instances = true;
+        } else {
+            services.push(Service {
+                location: r.clone(),
+                pid: Some(*pid),
+                externally_managed: externally_managed(&r.executable),
+                multiple_instances: false,
+            });
+        }
+    }
     for r in remembered {
         if !live.iter().any(|(_, l)| l.executable == r.executable) {
             services.push(Service {
+                externally_managed: externally_managed(&r.executable),
                 location: r,
                 pid: None,
+                multiple_instances: false,
             });
         }
     }
     services
 }
 pub(crate) fn remember_install(data: &Path, executable: &Path) -> Result<(), String> {
+    let _cache = CACHE_ACCESS.lock().map_err(|_| "服务位置暂时不可用")?;
     let path = data.join("discovery.json");
     let mut records = read_cache(&path)?;
     let executable = executable.to_string_lossy().into_owned();
@@ -211,20 +265,22 @@ pub(crate) fn remember_install(data: &Path, executable: &Path) -> Result<(), Str
     save_cache(&path, &records)
 }
 pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("第一阶段仅支持 macOS 的进程发现".into());
-    }
+    let _cache = CACHE_ACCESS.lock().map_err(|_| "进程检查暂时不可用")?;
     let cache_path = data_dir.join("discovery.json");
     let cache = read_cache(&cache_path);
     let can_save = cache.is_ok();
     let mut warning = cache.as_ref().err().cloned();
     let remembered = cache.unwrap_or_default();
-    #[cfg(unix)]
+    let cached = remembered.clone();
+    #[cfg(target_os = "macos")]
     let uid = unsafe { libc::geteuid() }.to_string();
-    #[cfg(not(unix))]
-    let uid = String::new();
+    #[cfg(target_os = "macos")]
+    let found = command_output("/bin/ps", &["-U", &uid, "-o", "pid=,comm="])
+        .map(|output| output.lines().filter_map(parse_process).collect::<Vec<_>>());
+    #[cfg(windows)]
+    let found = crate::windows::cpa::processes();
     let checked_at = now();
-    let output = match command_output("/bin/ps", &["-U", &uid, "-o", "pid=,comm="]) {
+    let found = match found {
         Ok(output) => output,
         Err(error) => {
             return Ok(Snapshot {
@@ -235,12 +291,38 @@ pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
             })
         }
     };
+    #[cfg(windows)]
+    let remembered = {
+        let mut remembered = remembered;
+        remembered.retain(|record| Path::new(&record.executable).is_file());
+        for candidate in crate::windows::cpa::disk_candidates() {
+            if let Ok(path) = crate::windows::cpa::canonical(&candidate) {
+                let executable = path.to_string_lossy().into_owned();
+                if is_cpa(&path) && !remembered.iter().any(|r| r.executable == executable) {
+                    remembered.push(Remembered {
+                        directory: project_directory(&executable),
+                        executable,
+                        working_directory: None,
+                        last_seen: checked_at,
+                    });
+                }
+            }
+        }
+        remembered
+    };
     let mut live = Vec::new();
-    for (pid, executable) in output.lines().filter_map(parse_process) {
-        if !Path::new(&executable).is_file() {
+    for (pid, executable) in found {
+        if !is_cpa(Path::new(&executable)) || !Path::new(&executable).is_file() {
             continue;
         }
+        #[cfg(target_os = "macos")]
         let cwd = working_directory(pid);
+        #[cfg(windows)]
+        let cwd = remembered
+            .iter()
+            .find(|r| r.executable == executable)
+            .and_then(|r| r.working_directory.clone());
+        #[cfg(target_os = "macos")]
         if cwd.is_none() {
             warning = Some("部分进程的工作目录不可访问；程序路径已识别".into());
         }
@@ -253,7 +335,7 @@ pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
         live.push((pid, record));
     }
     let services = merge(remembered, &live);
-    if can_save && !live.is_empty() {
+    if can_save && (!live.is_empty() || remembered_changed(&cached, &services)) {
         let mut records = Vec::new();
         for s in &services {
             if !records
@@ -275,7 +357,16 @@ pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
     })
 }
 
-#[cfg(test)]
+fn remembered_changed(before: &[Remembered], services: &[Service]) -> bool {
+    before.len() != services.len()
+        || services.iter().any(|service| {
+            !before
+                .iter()
+                .any(|old| old.executable == service.location.executable)
+        })
+}
+
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
     fn record(path: &str) -> Remembered {

@@ -1,13 +1,16 @@
 use super::{process, repository};
+#[cfg(target_os = "macos")]
 use std::os::unix::{
     fs::{OpenOptionsExt, PermissionsExt},
     process::CommandExt,
 };
+#[cfg(target_os = "macos")]
+use std::process::{Child, Stdio};
 use std::{
     fs,
     net::TcpListener,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::Command,
     thread,
     time::{Duration, Instant},
 };
@@ -20,18 +23,39 @@ pub(super) struct Layout {
 }
 impl Layout {
     pub fn existing(executable: &Path, port: u16) -> Result<Self, String> {
+        #[cfg(target_os = "macos")]
+        return Self::for_service(executable, port);
+        #[cfg(windows)]
+        {
+            let mut layout = Self::for_service(executable, port)?;
+            layout.repository = repository(&layout.executable)?;
+            Ok(layout)
+        }
+    }
+    pub fn for_service(executable: &Path, port: u16) -> Result<Self, String> {
         if port == 0 {
             return Err("端口无效".into());
         }
+        #[cfg(target_os = "macos")]
         let repository = repository(executable)?;
+        #[cfg(target_os = "macos")]
         let executable = executable
             .canonicalize()
             .map_err(|_| "CPA 程序不存在，请先安装")?;
+        #[cfg(windows)]
+        let executable =
+            crate::windows::cpa::canonical(executable).map_err(|_| "CPA 程序不存在，请先安装")?;
+        #[cfg(windows)]
+        if crate::windows::cpa::externally_managed(&executable) {
+            return Err("此 CPA 由其他应用托管，请在原应用管理".into());
+        }
         let directory = executable.parent().ok_or("CPA 路径无效")?.to_path_buf();
         let config = directory.join("config.yaml");
-        if !fs::symlink_metadata(&config).is_ok_and(|m| m.is_file()) {
+        if !regular_file(&config) {
             return Err("未找到同目录 config.yaml，无法安全启动".into());
         }
+        #[cfg(windows)]
+        let repository = directory.clone();
         Ok(Self {
             repository,
             directory,
@@ -41,120 +65,178 @@ impl Layout {
         })
     }
 }
-pub(super) fn go() -> Result<PathBuf, String> {
-    for path in [
-        "/opt/homebrew/bin/go",
-        "/usr/local/go/bin/go",
-        "/usr/local/bin/go",
-    ] {
-        if Path::new(path).is_file() {
-            return Ok(path.into());
+fn regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| {
+        #[cfg(windows)]
+        if crate::windows::is_reparse_point(&metadata) {
+            return false;
         }
-    }
-    Err("未找到 Go，请先安装 Go 1.26 或更高版本".into())
+        metadata.is_file()
+    })
 }
-pub(super) fn build(layout: &Layout) -> Result<tempfile::NamedTempFile, String> {
+pub(super) fn go() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    return crate::windows::cpa::tool(
+        "go.exe",
+        &[
+            ("ProgramFiles", "Go/bin"),
+            ("LOCALAPPDATA", "Programs/Go/bin"),
+        ],
+    )
+    .ok_or("未找到 Go，请安装 Go 1.26 或更高版本并重启 ModelLens".into());
+    #[cfg(target_os = "macos")]
+    {
+        for path in [
+            "/opt/homebrew/bin/go",
+            "/usr/local/go/bin/go",
+            "/usr/local/bin/go",
+        ] {
+            if Path::new(path).is_file() {
+                return Ok(path.into());
+            }
+        }
+        Err("未找到 Go，请先安装 Go 1.26 或更高版本".into())
+    }
+}
+pub(super) fn build(layout: &Layout) -> Result<tempfile::TempPath, String> {
     build_with(layout, &go()?)
 }
-fn build_with(layout: &Layout, tool: &Path) -> Result<tempfile::NamedTempFile, String> {
+fn build_with(layout: &Layout, tool: &Path) -> Result<tempfile::TempPath, String> {
     // Keep build artifacts outside the source tree so Go's VCS metadata stays accurate.
     let staging_directory = layout.repository.parent().ok_or("无法定位编译暂存目录")?;
     let staged = tempfile::Builder::new()
         .prefix(".cpa-build-")
+        .suffix(if cfg!(windows) { ".exe" } else { "" })
         .tempfile_in(staging_directory)
-        .map_err(|_| "无法创建编译临时文件")?;
+        .map_err(|_| "无法创建编译临时文件")?
+        .into_temp_path();
     let mut cmd = Command::new(tool);
     cmd.current_dir(&layout.repository)
         .args(["build", "-o"])
-        .arg(staged.path())
-        .arg("./cmd/server")
-        .env(
-            "PATH",
-            "/opt/homebrew/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-        );
+        .arg(&*staged)
+        .arg("./cmd/server");
+    #[cfg(target_os = "macos")]
+    cmd.env(
+        "PATH",
+        "/opt/homebrew/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    );
     process::output(cmd, Duration::from_secs(900)).map_err(|_| {
         "CPA 编译失败或超时；未停止原服务，请检查 Go 版本、依赖网络和源码".to_owned()
     })?;
-    fs::set_permissions(staged.path(), fs::Permissions::from_mode(0o700))
+    #[cfg(target_os = "macos")]
+    fs::set_permissions(&staged, fs::Permissions::from_mode(0o700))
         .map_err(|_| "无法设置 CPA 可执行权限")?;
     Ok(staged)
 }
-fn listeners(port: u16) -> Vec<u32> {
-    crate::discovery::command_output(
+fn listeners(port: u16) -> Result<Vec<u32>, String> {
+    #[cfg(windows)]
+    return crate::windows::cpa::listeners(port);
+    #[cfg(target_os = "macos")]
+    let mut pids: Vec<u32> = crate::discovery::command_output(
         "/usr/sbin/lsof",
         &["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-Fp"],
     )
     .unwrap_or_default()
     .lines()
     .filter_map(|s| s.strip_prefix('p')?.parse().ok())
-    .collect()
+    .collect();
+    #[cfg(target_os = "macos")]
+    {
+        pids.sort_unstable();
+        pids.dedup();
+        Ok(pids)
+    }
 }
 fn owner(layout: &Layout) -> Result<Option<u32>, String> {
+    let pids = listeners(layout.port)?;
+    if pids.is_empty() && TcpListener::bind(("127.0.0.1", layout.port)).is_ok() {
+        return Ok(None);
+    }
+    #[cfg(target_os = "macos")]
     if TcpListener::bind(("127.0.0.1", layout.port)).is_ok() {
         return Ok(None);
     }
-    let pids = listeners(layout.port);
     if pids.len() != 1 {
         return Err("端口被占用，无法确认 CPA 进程；未停止任何服务".into());
     }
     let pid = pids[0];
+    #[cfg(target_os = "macos")]
     let output =
         crate::discovery::command_output("/bin/ps", &["-p", &pid.to_string(), "-o", "pid=,comm="])?;
+    #[cfg(target_os = "macos")]
     let (_, exe) = output
         .lines()
         .find_map(crate::discovery::parse_process)
         .ok_or("占用端口的不是可识别 CPA，已停止操作")?;
-    if Path::new(&exe).canonicalize().ok().as_ref() != Some(&layout.executable) {
+    #[cfg(target_os = "macos")]
+    let actual = Path::new(&exe).canonicalize().ok();
+    #[cfg(windows)]
+    let actual = crate::windows::cpa::executable(pid);
+    if actual.as_ref() != Some(&layout.executable) {
         return Err("端口属于其他程序，已停止操作".into());
     }
     Ok(Some(pid))
 }
+#[cfg(all(test, target_os = "macos"))]
 fn stop(layout: &Layout) -> Result<(), String> {
     stop_checked(layout, None)
 }
 fn stop_checked(layout: &Layout, expected: Option<u32>) -> Result<(), String> {
     let Some(pid) = owner(layout)? else {
-        return Ok(());
+        return if expected.is_none() {
+            Ok(())
+        } else {
+            Err("CPA 进程已变化，请重新检测".into())
+        };
     };
     if expected.is_some_and(|expected| expected != pid) {
         return Err("CPA 进程已变化，请重新检测".into());
     }
-    let parent =
-        crate::discovery::command_output("/bin/ps", &["-p", &pid.to_string(), "-o", "ppid="])?
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| "无法核实 CPA 启动器")?;
-    let lock = layout.directory.join("dev.lock");
-    let holders = crate::discovery::command_output(
-        "/usr/sbin/lsof",
-        &["-t", lock.to_str().ok_or("路径无效")?],
-    )
-    .unwrap_or_default();
-    let supervised = parent > 1 && holders.lines().any(|s| s == parent.to_string());
-    if owner(layout)? != Some(pid) {
-        return Err("CPA 进程已变化，未发送停止信号".into());
-    }
-    // User authorized taking over this dev launcher, including its CPM child.
-    let target = if supervised { parent } else { pid };
-    if unsafe { libc::kill(target as i32, libc::SIGTERM) } != 0 {
-        return Err("无法正常停止 CPA / 原启动器".into());
-    }
-    let deadline = Instant::now() + Duration::from_secs(15);
-    while Instant::now() < deadline {
-        let cpa_gone = unsafe { libc::kill(pid as i32, 0) } != 0
-            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
-        let launcher_done = !supervised
-            || crate::discovery::command_output("/usr/sbin/lsof", &["-t", lock.to_str().unwrap()])
+    #[cfg(windows)]
+    return crate::windows::cpa::stop(pid, &layout.executable, layout.port);
+    #[cfg(target_os = "macos")]
+    {
+        let parent =
+            crate::discovery::command_output("/bin/ps", &["-p", &pid.to_string(), "-o", "ppid="])?
+                .trim()
+                .parse::<u32>()
+                .map_err(|_| "无法核实 CPA 启动器")?;
+        let lock = layout.directory.join("dev.lock");
+        let holders = crate::discovery::command_output(
+            "/usr/sbin/lsof",
+            &["-t", lock.to_str().ok_or("路径无效")?],
+        )
+        .unwrap_or_default();
+        let supervised = parent > 1 && holders.lines().any(|s| s == parent.to_string());
+        if owner(layout)? != Some(pid) {
+            return Err("CPA 进程已变化，未发送停止信号".into());
+        }
+        // User authorized taking over this dev launcher, including its CPM child.
+        let target = if supervised { parent } else { pid };
+        if unsafe { libc::kill(target as i32, libc::SIGTERM) } != 0 {
+            return Err("无法正常停止 CPA / 原启动器".into());
+        }
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            let cpa_gone = unsafe { libc::kill(pid as i32, 0) } != 0
+                && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+            let launcher_done = !supervised
+                || crate::discovery::command_output(
+                    "/usr/sbin/lsof",
+                    &["-t", lock.to_str().unwrap()],
+                )
                 .unwrap_or_default()
                 .lines()
                 .all(|s| s != parent.to_string());
-        if cpa_gone && launcher_done && TcpListener::bind(("127.0.0.1", layout.port)).is_ok() {
-            return Ok(());
+            if cpa_gone && launcher_done && TcpListener::bind(("127.0.0.1", layout.port)).is_ok() {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(200));
         }
-        thread::sleep(Duration::from_millis(200));
+        Err("CPA 未正常停止或端口被重新占用；未强制终止其他进程".into())
     }
-    Err("CPA 未正常停止或端口被重新占用；未强制终止其他进程".into())
 }
+#[cfg(target_os = "macos")]
 fn terminate_child(child: &mut Child) {
     unsafe {
         libc::kill(child.id() as i32, libc::SIGTERM);
@@ -178,50 +260,89 @@ pub(super) fn launch(layout: &Layout) -> Result<(), String> {
         .map_err(|_| "无法检查 CPA 启动状态")?;
     let _port = TcpListener::bind(("127.0.0.1", layout.port))
         .map_err(|_| "端口被占用，未启动第二个 CPA")?;
+    let log_path = layout.directory.join("cpa-modellens.log");
+    #[cfg(target_os = "macos")]
     let log = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(layout.directory.join("cpa-modellens.log"))
+        .open(&log_path)
         .map_err(|_| "无法创建 CPA 本地日志")?;
+    #[cfg(target_os = "macos")]
     log.set_permissions(fs::Permissions::from_mode(0o600))
         .map_err(|_| "无法保护 CPA 日志")?;
-    let mut cmd = Command::new(&layout.executable);
-    cmd.current_dir(&layout.directory)
-        .arg("--config")
-        .arg(&layout.config)
-        .env(
-            "LKS_TZ_STATE_FILE",
-            layout
-                .directory
-                .join("plugins/timezone-override/state.json"),
-        )
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(
-            log.try_clone().map_err(|_| "无法打开 CPA 日志")?,
-        ))
-        .stderr(Stdio::from(log))
-        .process_group(0);
-    drop(_port);
-    let mut child = cmd.spawn().map_err(|_| "CPA 启动失败")?;
+    #[cfg(target_os = "macos")]
+    let mut child = {
+        let mut cmd = Command::new(&layout.executable);
+        cmd.current_dir(&layout.directory)
+            .arg("--config")
+            .arg(&layout.config)
+            .env(
+                "LKS_TZ_STATE_FILE",
+                layout
+                    .directory
+                    .join("plugins/timezone-override/state.json"),
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(
+                log.try_clone().map_err(|_| "无法打开 CPA 日志")?,
+            ))
+            .stderr(Stdio::from(log))
+            .process_group(0);
+        drop(_port);
+        cmd.spawn().map_err(|_| "CPA 启动失败")?
+    };
+    #[cfg(windows)]
+    let child = {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+        let log = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&log_path)
+            .map_err(|_| "无法创建 CPA 本地日志")?;
+        if !log
+            .metadata()
+            .is_ok_and(|m| m.is_file() && !crate::windows::is_reparse_point(&m))
+        {
+            return Err("日志路径无效，未启动 CPA".into());
+        }
+        log.set_len(0).map_err(|_| "无法初始化 CPA 本地日志")?;
+        drop(_port);
+        crate::windows::cpa::spawn(&layout.executable, &layout.config, &layout.directory, &log)
+            .map_err(|_| "CPA 启动失败")?
+    };
+    #[cfg(target_os = "macos")]
+    let pid = child.id();
+    #[cfg(windows)]
+    let pid = child.pid;
     let deadline = Instant::now() + Duration::from_secs(45);
     while Instant::now() < deadline {
-        match child.try_wait() {
-            Ok(Some(_)) => return Err("CPA 提前退出，请查看安装目录 .dev/cpa-modellens.log".into()),
+        #[cfg(target_os = "macos")]
+        let exited = child.try_wait().map(|status| status.is_some());
+        #[cfg(windows)]
+        let exited = child.exited(0);
+        match exited {
+            Ok(true) => return Err("CPA 提前退出，请查看程序目录的 cpa-modellens.log".into()),
             Err(_) => {
+                #[cfg(target_os = "macos")]
                 terminate_child(&mut child);
+                #[cfg(windows)]
+                child.terminate_own_child();
                 return Err("CPA 进程状态不可用，已停止本次新进程".into());
             }
-            Ok(None) => {}
+            Ok(false) => {}
         }
         if client
             .get(format!("http://127.0.0.1:{}/", layout.port))
             .send()
             .is_ok_and(|r| r.status().is_success())
-            && listeners(layout.port).contains(&child.id())
+            && listeners(layout.port).is_ok_and(|pids| pids == [pid])
         {
+            #[cfg(target_os = "macos")]
             thread::spawn(move || {
                 let _ = child.wait();
             });
@@ -229,7 +350,10 @@ pub(super) fn launch(layout: &Layout) -> Result<(), String> {
         }
         thread::sleep(Duration::from_millis(200));
     }
+    #[cfg(target_os = "macos")]
     terminate_child(&mut child);
+    #[cfg(windows)]
+    child.terminate_own_child();
     Err("CPA 启动检查超时，已停止本次新进程".into())
 }
 pub(super) fn set_running(
@@ -252,35 +376,70 @@ pub(super) fn set_running(
 }
 pub(super) fn replace_and_restart(
     layout: &Layout,
-    staged: tempfile::NamedTempFile,
+    staged: tempfile::TempPath,
+    expected_pid: u32,
 ) -> Result<(), String> {
+    if owner(layout)? != Some(expected_pid) || !regular_file(&layout.config) {
+        return Err("原 CPA 进程或配置已变化，请重新检测".into());
+    }
     let backup = tempfile::Builder::new()
         .prefix(".cpa-backup-")
         .tempdir_in(&layout.directory)
         .map_err(|_| "无法备份原 CPA")?;
+    #[cfg(windows)]
+    crate::windows::cpa::private_directory(backup.path()).map_err(|_| "无法保护配置备份")?;
     fs::copy(&layout.executable, backup.path().join("cpa"))
         .map_err(|_| "备份原 CPA 失败，未停止服务")?;
-    fs::copy(&layout.config, backup.path().join("config.yaml"))
-        .map_err(|_| "备份配置失败，未停止服务")?;
-    fs::set_permissions(
-        backup.path().join("config.yaml"),
-        fs::Permissions::from_mode(0o600),
-    )
-    .map_err(|_| "无法保护配置备份")?;
-    if let Err(error) = stop(layout) {
-        let recovered = owner(layout).ok().flatten().is_some() || launch(layout).is_ok();
-        let path = backup.keep();
-        return Err(format!(
-            "{error}；{}；备份保留在 {}",
-            if recovered {
-                "原程序仍在运行或已重新启动"
-            } else {
-                "原服务未恢复，请核实端口"
-            },
-            path.display()
-        ));
+    let backup_config = backup.path().join("config.yaml");
+    #[cfg(target_os = "macos")]
+    fs::copy(&layout.config, &backup_config).map_err(|_| "备份配置失败，未停止服务")?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+        let backup_error = "备份配置失败，未停止服务";
+        let mut config = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&layout.config)
+            .map_err(|_| backup_error)?;
+        if !config
+            .metadata()
+            .is_ok_and(|m| m.is_file() && !crate::windows::is_reparse_point(&m))
+        {
+            return Err(backup_error.into());
+        }
+        let mut saved = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup_config)
+            .map_err(|_| backup_error)?;
+        std::io::copy(&mut config, &mut saved)
+            .and_then(|_| saved.sync_all())
+            .map_err(|_| backup_error)?;
     }
-    if fs::rename(staged.path(), &layout.executable).is_err() {
+    #[cfg(target_os = "macos")]
+    fs::set_permissions(&backup_config, fs::Permissions::from_mode(0o600))
+        .map_err(|_| "无法保护配置备份")?;
+    if let Err(error) = stop_checked(layout, Some(expected_pid)) {
+        #[cfg(windows)]
+        return Err(error);
+        #[cfg(target_os = "macos")]
+        {
+            let recovered = owner(layout).ok().flatten().is_some() || launch(layout).is_ok();
+            let path = backup.keep();
+            return Err(format!(
+                "{error}；{}；备份保留在 {}",
+                if recovered {
+                    "原程序仍在运行或已重新启动"
+                } else {
+                    "原服务未恢复，请核实端口"
+                },
+                path.display()
+            ));
+        }
+    }
+    if fs::rename(&staged, &layout.executable).is_err() {
         if launch(layout).is_ok() {
             return Err("替换 CPA 失败，原程序已重新启动".into());
         }
@@ -292,7 +451,7 @@ pub(super) fn replace_and_restart(
     }
     if let Err(error) = launch(layout) {
         let restored = fs::copy(backup.path().join("cpa"), &layout.executable)
-            .and_then(|_| fs::copy(backup.path().join("config.yaml"), &layout.config));
+            .and_then(|_| fs::copy(&backup_config, &layout.config));
         if restored.is_ok() && launch(layout).is_ok() {
             return Err(format!("{error}；已恢复原程序与配置并重新启动"));
         }
@@ -305,6 +464,6 @@ pub(super) fn replace_and_restart(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 #[path = "runtime_tests.rs"]
 mod tests;

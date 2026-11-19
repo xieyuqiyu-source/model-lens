@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { discoverServices, native, type Snapshot } from "./api";
-import { windowsDesktop } from "../../../windows/platform";
 export function useServices() {
   const [snapshot, setSnapshot] = useState<Snapshot>({
     services: [],
@@ -25,7 +24,6 @@ export function useServices() {
     }
   }, []);
   useEffect(() => {
-    if (windowsDesktop) return;
     void refresh();
     const timer = window.setInterval(() => void refresh(), 30000);
     const listener = native

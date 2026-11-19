@@ -184,13 +184,16 @@ pub async fn cpa_set_running(
         if service.pid != expected_pid {
             return Err("CPA 进程已变化，请重新检测后操作".into());
         }
-        let layout = super::runtime::Layout::existing(std::path::Path::new(&executable), port)?;
+        if service.multiple_instances {
+            return Err("同一个 CPA 程序存在多个进程，请先从原启动入口处理".into());
+        }
+        let layout = super::runtime::Layout::for_service(std::path::Path::new(&executable), port)?;
         phase(
             app,
             if running {
                 "$ CPA --config config.yaml · 正在启动…"
             } else {
-                "$ SIGTERM CPA / dev · 正在关闭…"
+                "正在正常关闭 CPA…"
             },
         );
         super::runtime::set_running(&layout, running, expected_pid)?;
@@ -222,28 +225,43 @@ pub async fn cpa_set_running(
 }
 #[tauri::command]
 pub async fn cpa_choose_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.run_on_main_thread(move || {
-        let result = objc2::MainThreadMarker::new().and_then(|main| {
-            let panel = objc2_app_kit::NSOpenPanel::openPanel(main);
-            panel.setCanChooseDirectories(true);
-            panel.setCanChooseFiles(false);
-            panel.setAllowsMultipleSelection(false);
-            panel.setCanCreateDirectories(true);
-            if panel.runModal() != 1 {
-                return None;
-            }
-            panel
-                .URL()
-                .and_then(|u| u.path())
-                .map(|p| format!("{}/CLIProxy", p))
-        });
-        let _ = tx.send(result);
-    })
-    .map_err(|_| "无法打开目录选择器")?;
-    tauri::async_runtime::spawn_blocking(move || rx.recv().map_err(|_| "目录选择未完成".to_owned()))
+    #[cfg(windows)]
+    {
+        let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
+        let hwnd = window.hwnd().map_err(|_| "无法打开目录选择器")?.0 as usize;
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::windows::cpa::choose_parent(hwnd)
+        })
+        .await
+        .map_err(|_| "目录选择未完成".to_owned())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            let result = objc2::MainThreadMarker::new().and_then(|main| {
+                let panel = objc2_app_kit::NSOpenPanel::openPanel(main);
+                panel.setCanChooseDirectories(true);
+                panel.setCanChooseFiles(false);
+                panel.setAllowsMultipleSelection(false);
+                panel.setCanCreateDirectories(true);
+                if panel.runModal() != 1 {
+                    return None;
+                }
+                panel
+                    .URL()
+                    .and_then(|u| u.path())
+                    .map(|p| format!("{}/CLIProxy", p))
+            });
+            let _ = tx.send(result);
+        })
+        .map_err(|_| "无法打开目录选择器")?;
+        tauri::async_runtime::spawn_blocking(move || {
+            rx.recv().map_err(|_| "目录选择未完成".to_owned())
+        })
         .await
         .map_err(|_| "目录选择未完成".to_owned())?
+    }
 }
 #[tauri::command]
 pub async fn cpa_install(

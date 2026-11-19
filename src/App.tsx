@@ -94,12 +94,7 @@ export default function App() {
     if (isTray) void openMain();
     else setModal("connection");
   };
-  const status = windowsDesktop ? (
-    <button className="service-status" onClick={connect}>
-      <i className={credentials.connected && !credentials.stale ? "online" : ""} />
-      {credentials.stale ? "CLIProxy 连接异常" : credentials.connected ? "CLIProxy 已连接" : "连接 CLIProxy"}
-    </button>
-  ) : (
+  const status = (
     <button
       className="service-status"
       onClick={() => setModal("service")}
@@ -170,14 +165,14 @@ export default function App() {
             />
             <div className="titlebar-right">
               {status}
-              {!windowsDesktop && <button
+              <button
                 className="icon-button"
                 aria-label="刷新进程状态"
                 disabled={services.busy}
                 onClick={() => void services.refresh()}
               >
                 <RefreshCw className={services.busy ? "spin" : ""} />
-              </button>}
+              </button>
               {appUpdate.version && <button
                 className="icon-button"
                 aria-label={`ModelLens ${appUpdate.version} 更新`}
@@ -240,7 +235,7 @@ export default function App() {
         <Connection
           state={credentials}
           onClose={() => setModal("")}
-          onInspect={windowsDesktop ? undefined : () => setModal("service")}
+          onInspect={() => setModal("service")}
         />
       )}
       {modal === "service" && (

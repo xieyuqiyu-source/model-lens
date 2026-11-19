@@ -6,6 +6,7 @@ import { Modal } from "../../components/Common";
 import { CpaVersions } from "./CpaVersions";
 import { CommandLog } from "./CommandLog";
 import type { ServiceState } from "./useServices";
+import { windowsDesktop } from "../../../windows/platform";
 
 export function ServicePanel({ state, onClose, port: initialPort }: {
   state: ServiceState;
@@ -21,6 +22,7 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
   const chosen = state.snapshot.services.find(s => s.executable === selected)
     ?? (state.snapshot.services.length === 1 ? state.snapshot.services[0] : undefined);
   const blocked = job.busy || state.busy || !state.known;
+  const managedElsewhere = chosen?.externallyManaged || chosen?.multipleInstances;
   const running = chosen?.pid != null;
   return (
     <Modal title="本机 CLIProxy" onClose={onClose}>
@@ -31,9 +33,9 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
             {!state.known ? "状态未知" : state.running ? "CPA 运行中" : "CPA 未运行"}
           </span>
           <div className="service-buttons">
-            <button className="button" disabled={blocked || !chosen || port < 1 || port > 65535}
+            <button className="button" disabled={blocked || !chosen || managedElsewhere || port < 1 || port > 65535}
               aria-label={running ? "关闭 CPA" : "启动 CPA"}
-              title={running ? "关闭会中断当前请求；原 dev 启动器托管时也会停止 CPM" : "启动已选择的 CPA"}
+              title={running ? (windowsDesktop ? "关闭会中断当前请求" : "关闭会中断当前请求；原 dev 启动器托管时也会停止 CPM") : "启动已选择的 CPA"}
               onClick={() => {
                 setNotice("");
                 if (chosen) void job.run(() => cpaApi.setRunning(chosen.executable, port, !running, chosen.pid));
@@ -44,7 +46,7 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
             <button className="button" disabled={job.busy || state.busy} onClick={async () => {
               const next = await state.refresh();
               if (!next?.statusKnown) { setNotice("请先完成本机检测"); return; }
-              setNotice(next.services.length ? "已发现安装，优先使用已有目录" : "");
+              setNotice(next.services.length && !windowsDesktop ? "已发现安装，优先使用已有目录" : "");
               setInstalling(true);
             }}><Download size={13} />安装 CLIProxy</button>
           </div>
@@ -57,7 +59,7 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
           e.preventDefault(); setNotice(""); void job.run(() => cpaApi.install(directory, port));
         }}>
           <label>安装到新目录
-            <input aria-label="CLIProxy 安装路径" value={directory} disabled={job.busy} placeholder="~/Applications/CLIProxy" onChange={e => setDirectory(e.target.value)} />
+            <input aria-label="CLIProxy 安装路径" value={directory} disabled={job.busy} placeholder={windowsDesktop ? "C:\\Tools\\CLIProxy" : "~/Applications/CLIProxy"} onChange={e => setDirectory(e.target.value)} />
           </label>
           <button type="button" className="button" disabled={job.busy} onClick={() => void cpaApi.chooseDirectory().then(path => {
             if (path) setDirectory(path);
@@ -75,21 +77,22 @@ export function ServicePanel({ state, onClose, port: initialPort }: {
               </label>}
               <details>
                 <summary className="service-name" aria-label={`CPA 地址：${service.executable}`}>
-                  <Folder size={16} /><strong>{service.executable.split("/").pop()}</strong>
-                  <span className="muted">{!state.known ? "状态未知" : service.pid ? `运行中 · PID ${service.pid}` : "未运行"}</span>
+                  <Folder size={16} /><strong>{service.executable.split(/[\\/]/).pop()}</strong>
+                  <span className="muted">{!state.known ? "状态未知" : service.multipleInstances ? "多个进程" : service.pid ? `运行中 · PID ${service.pid}` : "未运行"}</span>
                   <ChevronDown size={14} />
                 </summary>
                 <dl>
                   <dt>程序路径</dt><dd>{service.executable}</dd>
                   <dt>所在目录</dt><dd>{service.directory}</dd>
                   <dt>工作目录</dt><dd>{service.workingDirectory ?? "未能读取"}</dd>
+                  {service.externallyManaged && <><dt>托管方式</dt><dd>由其他应用管理</dd></>}
                 </dl>
               </details>
             </article>
           ))}
         </div>}
         {chosen && <CpaVersions executable={chosen.executable} busy={job.busy} update={job.update}
-          updateDisabled={blocked || !running} onUpdate={() => {
+          updateDisabled={blocked || !running || managedElsewhere === true} onUpdate={() => {
             setNotice(""); void job.run(() => cpaApi.pull(chosen.executable));
           }} />}
         <CommandLog logs={job.logs} feedback={job.feedback} busy={job.busy} />

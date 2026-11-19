@@ -1,6 +1,7 @@
 use super::*;
+use std::process::Stdio;
 pub(super) fn command(path: &Path, args: &[&str]) {
-    assert!(Command::new("/usr/bin/git")
+    assert!(Command::new(git_executable().unwrap())
         .current_dir(path)
         .args(args)
         .env("GIT_AUTHOR_NAME", "Synthetic")
@@ -118,7 +119,9 @@ fn pull_never_overwrites_ignored_configuration_or_runs_checkout_hooks() {
     fs::remove_file(work.join("config.yaml")).unwrap();
     let hook = work.join(".git/hooks/post-merge");
     fs::write(&hook, "#!/bin/sh\ntouch hook-ran\n").unwrap();
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
     fs::set_permissions(hook, fs::Permissions::from_mode(0o755)).unwrap();
     assert!(pull(&work).unwrap().updated);
     assert!(!work.join("hook-ran").exists());
