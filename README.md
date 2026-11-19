@@ -1,12 +1,12 @@
 # ModelLens · 模型透镜
 
-把模型探查、账号状态和剩余额度放进一个轻量的 macOS 客户端。
+把模型探查、账号状态和剩余额度放进一个轻量的桌面客户端。
 
 ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目录、比较采样结果和管理凭证，也可以从菜单栏快速确认各账号的额度与状态。应用使用 **Tauri 2 + Rust + React + TypeScript**，凭证操作由 Rust 后端处理，前端负责展示与交互。
 
-**当前版本：0.2.29 · Apple Silicon Mac · 公开源码仓库**
+**当前版本：0.2.30 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
 
-[快速开始](#快速开始) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.29.md)
+[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md)
 
 ## 界面预览
 
@@ -48,14 +48,16 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 
 ## 当前交付范围
 
-- **已验证**：Apple Silicon Mac；构建目标最低 macOS 13，本机验收环境 macOS 26.5.2。
-- **尚未交付**：Intel Mac、Windows、凭证到期查询、自动更新。
-- **签名状态**：本地 ad-hoc 签名预览版，未进行 Apple Developer ID 签名或公证。
+- **macOS**：Apple Silicon，构建目标最低 macOS 13。安装包为本地 ad-hoc 签名。
+- **Windows**：x64，使用 WebView2。支持连接已运行的 CLIProxy、探查与凭证管理。安装包通过 HTTPS 发布，应用更新通过 Tauri 签名验证。
+- **后续范围**：Intel Mac、Windows ARM64、Windows 上的 CPA 自动发现和进程管理、macOS 应用自动更新。
 - **兼容性边界**：浏览器与合成 HTTP 测试已覆盖主要流程，不等同于所有厂商真实账号均已实测。
 
 ## 快速开始
 
-### 1. 从源码构建
+### 1. 安装
+
+Windows 用户可从 [Windows 安装与更新](windows/README.md) 下载 x64 安装包。下方从源码构建命令适用于 Apple Silicon Mac。
 
 准备 Xcode Command Line Tools、Node.js 24、pnpm 10.10.0 和 Rust 1.89。当前项目使用锁文件固定依赖。
 
@@ -85,7 +87,9 @@ pnpm package
 
 ### 3. 理解本地数据
 
-连接成功后，端口与管理密钥以**明文 JSON**保存在应用专用目录，目录权限 `0700`、文件权限 `0600`；应用不启用云同步，也不使用钥匙串。
+连接成功后，端口与管理密钥以**明文 JSON**保存在应用专用目录。macOS 目录权限为 `0700`，文件权限为 `0600`。应用不启用云同步，也不使用钥匙串。
+
+Windows 将管理密钥与第三方 API 设置存放在 `%LOCALAPPDATA%\io.modellens.desktop`，访问权限由 Windows 用户目录的 ACL 管理。
 
 | 数据 | 位置或生命周期 |
 | --- | --- |

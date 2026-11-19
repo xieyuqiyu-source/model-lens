@@ -4,7 +4,7 @@
 
 - 这是独立的 **ModelLens · 模型透镜** 客户端，公开仓库为 <https://github.com/xieyuqiyu-source/model-lens>。它与同级 `DSH` 目录是不同项目，不修改 DSH 插件、宿主或安装 profile。
 - 技术栈为 Tauri 2 + Rust + React + TypeScript + Vite。保持轻量，复用现有控件，不引入额外服务、数据库或自制插件加载系统。
-- 当前阶段只交付用户本机 Apple Silicon Mac。Intel Mac 和 Windows 是后续目标，未验证前不能声称支持。
+- 交付用户本机 Apple Silicon Mac 和 Windows x64；Intel Mac 与 Windows ARM64 未验证。Windows 专用适配、构建与产物集中在 `windows/`，复用项目主代码。
 - 用户负责提需求、确认设计；在已确认版本上迭代，不自行重做风格或扩大功能范围。
 - 接手先读本文件、`README.md`、`DESIGN.md` 和最新 `docs/verification-*.md`，然后检查 Git 状态。文档中的历史版本记录不能覆盖后续明确决定。
 
@@ -142,3 +142,9 @@
 - 0.2.27：第三方采样兼容服务在 `stream: false` 时仍返回的 `text/event-stream`，拼接第一项回答的正文分片，检查结束状态后才参与分析。
 - 0.2.28：手动检测逐条复制提示词、粘贴对应回答，走与自动采样相同的本地参考库分析和历史。手动评分无需连接。切换模式保留草稿，更换提示词清空草稿。
 - 0.2.29：用户授权启动时后台检查及手动更新指纹库。只从 `https://lm.ikale.io/data/` 读取公开数据，不向上游发送 Key、提示词或回答。完整校验后原子写入本机缓存，失败使用已验证缓存或内置库。每轮探查与历史使用对应库版本。内置 DSH 快照保留为离线回退，运行时用上游 Rust SDK 读取配套二进制数据。
+
+## 0.2.30 Windows x64 与客户端自动更新（2026-11-18）
+
+- Windows 连接已独立运行的本机 CLIProxy，沿用模型探查、指纹库、凭证和额度逻辑。原生窗口与系统托盘适配 Windows，本机 CPA 进程发现、安装、启停和更新保留在 macOS。
+- Windows 管理密钥与第三方 API 缓存在 `%LOCALAPPDATA%\io.modellens.desktop`，由当前用户目录权限保护。复制 API Key 由 Rust 写入剪贴板，排除该条目的 Windows 剪贴板历史和云同步。
+- 客户端启动及运行期间自动检查应用更新，用户确认后下载、验签、安装并重启。线上安装包与清单发布到「超级 Linux」的 HTTPS 静态目录。更新私钥只在本机签名时使用，GitHub Actions 仅构建并验收安装包。交付流程见 `windows/README.md`。
