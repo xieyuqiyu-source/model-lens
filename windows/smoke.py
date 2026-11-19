@@ -45,12 +45,12 @@ def webview_debug_port(port):
 
     policy = r"Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
     executable = "model-lens.exe"
-    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, policy, access=winreg.KEY_READ | winreg.KEY_WRITE) as key:
+    with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, policy, access=winreg.KEY_READ | winreg.KEY_WRITE) as key:
         try:
             previous = winreg.QueryValueEx(key, executable)
         except FileNotFoundError:
             previous = None
-        # NSIS can restart from a different process environment after installing.
+        # Elevated WebView2 hosts ignore user-level debugger overrides.
         winreg.SetValueEx(key, executable, 0, winreg.REG_SZ, f"--remote-debugging-port={port}")
         try:
             yield
@@ -66,9 +66,12 @@ def version(page):
     return page.evaluate("() => window.__TAURI_INTERNALS__.invoke('plugin:app|version')")
 
 
-def attach(playwright, endpoint, expected):
+def attach(playwright, endpoint, expected, process=None):
     deadline = time.monotonic() + 120
+    last_error = "未发现符合版本的主窗口"
     while time.monotonic() < deadline:
+        if process is not None and process.poll() is not None:
+            raise AssertionError(f"ModelLens 在启动时退出，退出码 {process.returncode}")
         try:
             with urlopen(f"{endpoint}/json/version", timeout=2) as response:
                 debugger = json.load(response)["webSocketDebuggerUrl"]
@@ -78,10 +81,10 @@ def attach(playwright, endpoint, expected):
                     if page.url != "about:blank" and "view=tray" not in page.url and version(page) == expected:
                         return browser, page
             browser.close()
-        except (OSError, Error, KeyError):
-            pass
+        except (OSError, Error, KeyError) as error:
+            last_error = str(error)
         time.sleep(1)
-    raise AssertionError(f"Windows 应用未进入版本 {expected}")
+    raise AssertionError(f"Windows 应用未进入版本 {expected}，最后一次检查：{last_error}")
 
 
 def settings(page):
@@ -127,8 +130,9 @@ def main(installer, expected_update):
         Thread(target=server.serve_forever, daemon=True).start()
         process = subprocess.Popen([str(executable)])
         try:
-            browser, page = attach(playwright, endpoint, expected)
+            browser, page = attach(playwright, endpoint, expected, process)
             verify_ui(browser, page, server.server_port)
+            print(f"Windows {expected} 安装成功，CLIProxy、模型目录、剪贴板和托盘已核验。", flush=True)
             dialog = settings(page)
             expect(dialog.get_by_role("button", name="检查应用更新")).to_be_visible()
             if expected_update:
