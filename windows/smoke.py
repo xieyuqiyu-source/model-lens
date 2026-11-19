@@ -101,7 +101,7 @@ def verify_ui(browser, page, port):
     expect(title.get_by_role("button", name="CLIProxy 已连接")).to_be_visible()
 
     page.get_by_role("button", name="凭证优先", exact=True).click()
-    expect(page.get_by_text("windows@example.invalid", exact=True).first).to_be_visible()
+    expect(page.locator(".credential-card").get_by_text("windows@example.invalid", exact=True)).to_be_visible()
     page.get_by_role("button", name="复制 API Key", exact=True).click()
     expect(page.get_by_text("API Key 已复制", exact=True)).to_be_visible()
     clip = subprocess.check_output(["pwsh", "-NoProfile", "-Command", "Get-Clipboard -Raw"], text=True)
