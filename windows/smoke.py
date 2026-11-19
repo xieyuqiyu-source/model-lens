@@ -39,15 +39,26 @@ class MockCpa(BaseHTTPRequestHandler):
             self.respond(responses[self.path])
 
     def do_POST(self):
-        if self.path != "/v1/chat/completions":
+        if self.path not in ("/v1/chat/completions", "/v1/responses", "/v1/messages"):
             return self.send_error(404)
-        if self.headers.get("Authorization") != "Bearer synthetic-client-key":
+        if self.path == "/v1/messages":
+            if self.headers.get("x-api-key") != "synthetic-client-key" or self.headers.get("anthropic-version") != "2023-06-01":
+                return self.send_error(401)
+        elif self.headers.get("Authorization") != "Bearer synthetic-client-key":
             return self.send_error(401)
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if request.get("model") != "synthetic-model" or not request["messages"][0]["content"]:
+        prompt = request["input"] if self.path == "/v1/responses" else request["messages"][0]["content"]
+        if request.get("model") != "synthetic-model" or not prompt:
             return self.send_error(400)
         answer = sample_text(self.server.samples)
         self.server.samples += 1
+        if self.path == "/v1/responses":
+            return self.respond({"model": "synthetic-model", "status": "completed", "output": [{
+                "type": "message", "role": "assistant", "content": [{"type": "output_text", "text": answer}],
+            }]})
+        if self.path == "/v1/messages":
+            return self.respond({"model": "synthetic-model", "stop_reason": "end_turn",
+                                 "content": [{"type": "text", "text": answer}]})
         self.respond({"model": "synthetic-model", "choices": [{
             "message": {"content": answer}, "finish_reason": "stop",
         }]})
@@ -158,10 +169,26 @@ def verify_probe(page, server):
     form.get_by_role("button", name="保存并读取模型", exact=True).click()
     expect(form).to_be_hidden(timeout=15000)
     start.click()
+    expect(result).to_contain_text("2 / 3 有效样本", timeout=30000)
+    assert server.samples == 5
+    result.get_by_role("button", name="ModelTrace 对照").click()
+    expect(result).to_contain_text("同一批回答 · 独立排名")
+    result.get_by_role("button", name="补测第 3 次").click()
     expect(result).to_contain_text("3 / 3 有效样本", timeout=30000)
     assert server.samples == 6
+    for protocol, expected_count in [("Responses", 8), ("Anthropic Messages", 10)]:
+        probe.get_by_role("button", name="编辑第三方 API").click()
+        form = page.get_by_role("dialog", name="编辑第三方 API")
+        form.get_by_role("button", name="接口协议：", exact=False).click()
+        form.get_by_role("option", name=protocol, exact=True).click()
+        form.get_by_label("模型 ID", exact=True).fill("synthetic-model")
+        form.get_by_role("button", name="保存配置", exact=True).click()
+        expect(form).to_be_hidden(timeout=15000)
+        start.click()
+        expect(result).to_contain_text("2 / 3 有效样本", timeout=30000)
+        assert server.samples == expected_count
     probe.get_by_role("button", name="CLIProxy", exact=True).click()
-    print("Windows CLIProxy 三次采样、手动评分及第三方 API 三次采样通过。", flush=True)
+    print("Windows CLIProxy、手动评分、三种第三方 API、两次采样后补测及 ModelTrace 对照通过。", flush=True)
 
 
 def git_fixture(repo, *args):

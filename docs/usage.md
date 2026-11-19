@@ -28,13 +28,13 @@
 
 接口依据：[官方管理 API v8](https://help.router-for.me/management/apiv8) 及本地 CLIProxy 公开源码的标准模型路由。v8 只读取 `/config/access/api-keys`，既有 v0 连接读取 `/api-keys`；不下载完整配置或厂商认证文件。
 
-### 第三方 API / 中转站（0.2.24 起，0.2.25 支持多个）
+### 第三方 API / 中转站
 
 - 在模型探查的自动检测模式下切换 **CLIProxy / 第三方 API**，选择会被记住，主窗口和菜单栏同步。
-- 填写 OpenAI 兼容的 Base URL（通常以 `/v1` 结尾）。需要鉴权时填写 API Key，新增无需鉴权的接口时留空。应用请求 `<Base URL>/models` 读取模型，探查时请求 `<Base URL>/chat/completions`。两类请求都只在配置了 Key 时发送 `Authorization` 请求头。
-- 采样兼容普通 JSON 和 `text/event-stream`。如果服务以 SSE 返回分片，应用会拼接正文，并检查模型是否正常结束。
+- 填写 Base URL（通常以 `/v1` 结尾）并选择 Chat Completions、Responses 或 Anthropic Messages。也可粘贴与选中协议对应的完整接口地址。Chat 和 Responses 使用 Bearer Key，Messages 使用 `x-api-key` 和 `anthropic-version`。免鉴权 API 的 Key 可留空。
+- 默认发送两次探针。点击「补测第 3 次」才追加一次，合并同一轮的回答并更新历史记录。应用用同批有效回答算出主排名和 ModelTrace 的独立排名。三种协议均处理 JSON 和标准 `text/event-stream`，只将正常结束的正文用于评分。
 - 可保存多个第三方 API（最多 50 个）。下拉选择当前使用的一组，末项“＋ 添加第三方 API”新增；铅笔按钮编辑或删除当前一组。名称可选，留空使用域名；选择会被记住。
-- 保存前先读取模型列表，失败不保存；编辑时 Key 留空沿用该组已保存的 Key。0.2.24 保存的单条记录升级后自动作为第一组保留。
+- 默认通过 `/models` 验证连接和读取目录，失败不保存。仅提供生成接口的中转站可填写精确模型 ID，跳过目录并在检测时验证连接。同一地址来源的编辑可留空沿用 Key，改域名或端口时需重新填写。旧配置继续使用 Chat Completions。
 - Base URL 远程地址必须是 `https`，`http` 仅允许 `localhost` / `127.0.0.1` / `[::1]`；不得包含账号、查询参数或片段。不跟随重定向，避免把 Key 发往其他主机。此通道使用系统代理设置（访问境外中转常需要），管理接口仍禁用代理。
 - Key 与地址以明文 JSON 保存在 `~/Library/Application Support/io.modellens.desktop/external-api.json`，目录 0700、文件 0600；仅 Rust 后端读取，不回传界面、不写日志。“删除此 API”只移除对应一组，最后一组删除后文件随之删除。
 - 中转站可能改写模型或请求，结果仍是参考库内排名，不能认证中转站背后的真实型号。指定账号测试仅适用于 CLIProxy 凭证。

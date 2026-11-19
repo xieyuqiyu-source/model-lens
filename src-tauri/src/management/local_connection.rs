@@ -1,6 +1,8 @@
 use super::{transport::Api, Session};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+const LOCAL_FILE_LIMIT: usize = 65_536;
+
 // Only this app's explicitly entered connection is stored; never search other apps' credentials.
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct SavedConnection {
@@ -81,7 +83,7 @@ impl LocalFile {
                 .map_err(|_| "无法保护本机连接文件")?;
         }
         let mut bytes = Vec::new();
-        file.take(65537)
+        file.take(LOCAL_FILE_LIMIT as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| "无法读取本机连接文件")?;
         decode(&bytes).map(Some)
@@ -112,6 +114,9 @@ impl LocalFile {
                 fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
             }
             let bytes = serde_json::to_vec(connection)?;
+            if bytes.len() > LOCAL_FILE_LIMIT {
+                return Err("本机文件超过大小限制".into());
+            }
             // NamedTempFile is created exclusively with mode 0600 on Unix.
             let mut file = tempfile::Builder::new()
                 .prefix(".connection-")
@@ -146,7 +151,7 @@ impl ConnectionStore for LocalFile {
     }
 }
 fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
-    if bytes.len() > 65536 {
+    if bytes.len() > LOCAL_FILE_LIMIT {
         return Err("本机连接记录无效，请忘记后重新连接".into());
     }
     serde_json::from_slice(bytes).map_err(|_| "本机连接记录无效，请忘记后重新连接".into())

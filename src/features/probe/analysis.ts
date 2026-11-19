@@ -88,4 +88,5 @@ export type ProbeRecord = Detection & {
   model: string;
   credential: string;
   attempts: Sample[];
+  modelTrace?: string[];
 };

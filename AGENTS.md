@@ -159,3 +159,8 @@
 
 - Apple Silicon Mac 支持自动检查、用户确认安装和重启。Mac 使用独立的更新公钥及「超级 Linux」`/modellens/macos/` 路径，Windows 同服务器独立发布。共享发布脚本放在 `release/`，Mac 构建和发布见中文 README。
 - 只在主窗口安装。Mac 后端先下载与验签，再核对并锁住管理会话；替换期间拦截普通退出，正常重启后恢复连接和偏好。旧版需要手动替换一次应用；验收使用不同的应用标识和合成服务。
+
+## 0.2.33 第三方 API 中转站检测
+
+- 第三方 API 默认采两次，补第三次沿用原配置与主库版本，同轮结果和历史原位更新。ModelTrace 固定快照做本机独立对照。保留现有界面风格及已有 CLIProxy、账号和手动采样流程。
+- 直连 Chat Completions、Responses、Anthropic Messages。旧配置默认 Chat，可手填模型 ID 跳过目录。Key 留空只能在同一来源沿用已存 Key。开发验收使用合成端点和凭证。

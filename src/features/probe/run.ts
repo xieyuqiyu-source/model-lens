@@ -11,14 +11,15 @@ export async function collectSamples(
   }>,
   signal: AbortSignal,
   progress: (slot: number, attempts: Sample[]) => void,
+  firstSlot = 1,
 ) {
   const samples: Sample[] = [],
     attempts: Sample[] = [],
     warnings: string[] = [];
   const started = Date.now();
   if (
-    challenges.length !== 3 ||
-    new Set(challenges.map((c) => c.expected_count)).size !== 3
+    challenges.length < 1 || firstSlot < 1 || firstSlot + challenges.length > 4 ||
+    new Set(challenges.map((c) => c.expected_count)).size !== challenges.length
   )
     throw new Error("检测提示词无效");
   for (const [index, challenge] of challenges.entries()) {
@@ -27,16 +28,17 @@ export async function collectSamples(
       warnings.push("本轮已达到 5 分钟，停止后续采样");
       break;
     }
-    progress(index + 1, [...attempts]);
+    const slot = firstSlot + index;
+    progress(slot, [...attempts]);
     try {
       const answer = await ask(challenge.prompt);
       signal.throwIfAborted();
-      const sample = { ...challenge, ...answer, slot: index + 1 };
+      const sample = { ...challenge, ...answer, slot };
       attempts.push(sample);
       const issue = sampleIssue(sample);
-      if (issue) warnings.push(`回答 ${index + 1}：${issue}`);
+      if (issue) warnings.push(`回答 ${slot}：${issue}`);
       else samples.push(sample);
-      progress(index + 1, [...attempts]);
+      progress(slot, [...attempts]);
     } catch (error) {
       signal.throwIfAborted();
       warnings.push(

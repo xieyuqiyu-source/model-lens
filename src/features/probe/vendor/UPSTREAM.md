@@ -20,3 +20,12 @@ Vite 直接编译 TypeScript，两个 JSON 原样作为内置库打包。使用�
 更新内置库时从同一个上游提交整组更新六份文件，同步此表、Worker 哈希与来源记录，运行 `pnpm test:ui` 与浏览器探查验收。
 
 从 0.2.29 起，运行时通过 [上游数据接口](https://lm.ikale.io/docs/sdk/data/) 下载配套的模型目录和二进制评分参数，使用 `lmfpd 0.2.0` 本地评分。独立更新的数据格式为 `lmfpd-data-v1` / `shared-detector-v2`。本页哈希对应安装包内置库。
+
+## ModelTrace 对照
+
+第三方 API 检测另用 [ModelTrace 6cd4a8f](https://github.com/xqy2006/ModelTrace/tree/6cd4a8ff0f3f4e49d6d6969dd2fbadfa1569fde2) 提供参考候选。`modeltrace/` 下的 `fingerprint-core.js`、`unified_bank.json` 分别原样取自 `static/fingerprint-core.js` 和 `data/unified_bank.json`，附带原始 [MIT 许可](modeltrace/LICENSE)。本地 Worker 使用主检测同一批有效回答，分别展示两套排名。
+
+| 文件 | SHA-256 |
+| --- | --- |
+| `modeltrace/fingerprint-core.js` | `83fa5bd611e18f8339122582335123c8ea168ed242298bb31f4e363abeeb6e4a` |
+| `modeltrace/unified_bank.json` | `f267d0513aa06981d024ec5394746fceddf44e4e8a75fa6bf8304255f4b32d6d` |

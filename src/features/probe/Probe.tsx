@@ -152,7 +152,7 @@ export function Probe(p: Props) {
             {s.external
               ? !s.entry
                 ? "添加第三方 API 后可探查"
-                : s.catalogError || "3 次采样 · 消耗额度 · 第三方 API 直连"
+                : s.catalogError || "默认 2 次采样 · 可补测 · 第三方 API 直连"
               : !p.connected
                 ? "连接管理接口后可自动探查"
                 : s.catalogError ||
@@ -208,6 +208,7 @@ export function Probe(p: Props) {
                 : s.manual ? "展开后粘贴模型回答" : "选择模型后开始采样"}
             </small>
           </div>
+          {s.canSupplement && <button className="text-button" disabled={s.busy} onClick={() => void s.run(true)}>补测第 3 次</button>}
           <button className="button expand-probe" onClick={p.onExpand}>
             展开探查详情
           </button>
@@ -215,7 +216,7 @@ export function Probe(p: Props) {
       ) : (
         <>
           {s.result ? (
-            <ProbeResult record={s.result} notify={p.notify} />
+            <ProbeResult record={s.result} notify={p.notify} onSupplement={s.canSupplement && !s.busy ? () => void s.run(true) : undefined} />
           ) : (
             !s.busy && !s.manual &&
             (

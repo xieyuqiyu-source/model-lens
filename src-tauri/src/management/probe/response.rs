@@ -20,11 +20,7 @@ pub(super) fn parse(value: &Value) -> Result<Answer, String> {
 }
 
 pub(super) fn parse_stream(bytes: &[u8]) -> Result<Answer, String> {
-    let stream = std::str::from_utf8(bytes).map_err(|_| "采样流格式异常")?;
-    let stream = stream
-        .trim_start_matches('\u{feff}')
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
+    let stream = normalize_stream(bytes)?;
     let mut text = String::new();
     let mut model = String::new();
     let mut stopped = None;
@@ -62,6 +58,14 @@ pub(super) fn parse_stream(bytes: &[u8]) -> Result<Answer, String> {
     answer(&text, stopped && !called_tool, &model)
 }
 
+pub(super) fn normalize_stream(bytes: &[u8]) -> Result<String, String> {
+    Ok(std::str::from_utf8(bytes)
+        .map_err(|_| "采样流格式异常")?
+        .trim_start_matches('\u{feff}')
+        .replace("\r\n", "\n")
+        .replace('\r', "\n"))
+}
+
 pub(super) fn sse_data(stream: &str) -> impl Iterator<Item = String> + '_ {
     stream
         .split("\n\n")
@@ -80,7 +84,7 @@ fn has_tool_call(message: &Value) -> bool {
     !(calls.is_null() || calls.as_array().is_some_and(Vec::is_empty))
 }
 
-fn answer(text: &str, stopped: bool, model: &str) -> Result<Answer, String> {
+pub(super) fn answer(text: &str, stopped: bool, model: &str) -> Result<Answer, String> {
     if text.chars().count() > 20000 {
         return Err("采样回答过长，未参与分析".into());
     }

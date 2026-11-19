@@ -1,11 +1,14 @@
 import { Fingerprint, Copy } from "lucide-react";
+import { Disclosure } from "../../components/Disclosure";
 import { builtinBank, detectorCommit, type ProbeRecord } from "./analysis";
 export function ProbeResult({
   record,
   notify,
+  onSupplement,
 }: {
   record: ProbeRecord;
   notify: (text: string) => void;
+  onSupplement?: () => void;
 }) {
   const r = record.analysis;
   const bank = record.referenceBank ?? builtinBank;
@@ -50,10 +53,19 @@ export function ProbeResult({
           {w}
         </p>
       ))}
+      {record.modelTrace && <Disclosure title="ModelTrace 对照">
+        {record.modelTrace.length ? <div className="rankings">
+          <span className="meta">同一批回答 · 独立排名</span>
+          {record.modelTrace.map((name, i) => <div key={i}>
+            <span className="rank-index">0{i + 1}</span><span>{name}</span>
+          </div>)}
+        </div> : <p className="muted">ModelTrace 对照暂不可用。</p>}
+      </Disclosure>}
       <footer>
         <span className="meta">
           {record.credential && `${record.credential} · `}指纹库 {bank.builtAt.slice(0, 10)}
         </span>
+        {onSupplement && <button className="text-button" onClick={onSupplement}>补测第 3 次</button>}
         <button
           className="text-button"
           onClick={() =>

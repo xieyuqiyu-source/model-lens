@@ -1,6 +1,8 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { builtinBank, prepareSamples, type BankInfo, type Challenge, type Detection, type Sample } from "./analysis";
-export type ExternalEntry = { id: string; name: string; baseUrl: string };
+export type ExternalProtocol = "chat" | "responses" | "messages";
+export type ExternalProfile = { name: string; baseUrl: string; protocol: ExternalProtocol; modelId: string };
+export type ExternalEntry = ExternalProfile & { id: string; revision: string };
 export type ProbeModel = { id: string; name: string; brand: string };
 export type Answer = {
   text: string;
@@ -15,12 +17,12 @@ export const probeApi = {
   sample: (id: string, model: string, prompt: string) =>
     invoke<Answer>("probe_sample", { id, model, prompt }),
   externalList: () => invoke<ExternalEntry[]>("external_list"),
-  externalSave: (id: string | null, name: string, baseUrl: string, key: string) =>
-    invoke<{ id: string; models: ProbeModel[] }>("external_save", { id, name, baseUrl, key }),
+  externalSave: (id: string | null, profile: ExternalProfile, key: string) =>
+    invoke<{ id: string; models: ProbeModel[] }>("external_save", { id, ...profile, key }),
   externalForget: (id: string) => invoke<void>("external_forget", { id }),
   externalModels: (id: string) => invoke<ProbeModel[]>("external_models", { id }),
-  externalSample: (id: string, model: string, prompt: string) =>
-    invoke<Answer>("external_sample", { id, model, prompt }),
+  externalSample: (entry: ExternalEntry, model: string, prompt: string) =>
+    invoke<Answer>("external_sample", { id: entry.id, revision: entry.revision ?? "", model, prompt }),
 };
 export type BankStatus = { bank: BankInfo; busy: boolean; message: string; revision: number };
 export const referenceApi = {
@@ -62,6 +64,12 @@ export function analyze(
   version = builtinBank.version,
 ): Promise<Detection> {
   if (version !== builtinBank.version) return analyzeUpdated(samples, version, signal);
+  return analyzeInWorker<Detection>(samples, signal, false);
+}
+export function compareModelTrace(samples: Sample[], signal: AbortSignal) {
+  return analyzeInWorker<string[]>(samples, signal, true);
+}
+function analyzeInWorker<T>(samples: Sample[], signal: AbortSignal, modelTrace: boolean): Promise<T> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new Error("分析已取消"));
@@ -95,6 +103,6 @@ export function analyze(
         ? reject(new Error(event.data.error))
         : resolve(event.data.result);
     };
-    worker.postMessage(samples);
+    worker.postMessage({ samples, modelTrace });
   });
 }

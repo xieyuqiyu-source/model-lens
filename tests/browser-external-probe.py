@@ -23,14 +23,15 @@ window.__TAURI_INTERNALS__ = {
    if(args.key === 'bad') throw '第三方 API 认证失败，请检查 API Key';
    const baseUrl = args.baseUrl.replace(/\/$/,'');
    const name = args.name.trim() || new URL(baseUrl).host;
-   if(args.id) { const e = ext.find(e=>e.id===args.id); Object.assign(e, {name, baseUrl}, args.key ? {key:args.key} : {}); }
-   else ext.push({id:'id-'+ext.length+'-'+Date.now(), name, baseUrl, key:args.key});
+   const profile = {name, baseUrl, protocol:args.protocol, modelId:args.modelId, revision:String(calls.length)};
+   if(args.id) { const e = ext.find(e=>e.id===args.id); Object.assign(e, profile, args.key ? {key:args.key} : {}); }
+   else ext.push({id:'id-'+ext.length+'-'+Date.now(), ...profile, key:args.key});
    persist();
    const id = args.id || ext.at(-1).id;
    return {id, models:[{id:'m',name:'m',brand:'openai'}]};
   }
   if(cmd === 'external_forget') { ext = ext.filter(e=>e.id!==args.id); persist(); return null; }
-  if(cmd === 'external_models') { const e = ext.find(e=>e.id===args.id); return [{id:e.name+'-gpt',name:e.name+'-gpt',brand:'openai'}]; }
+  if(cmd === 'external_models') { const e = ext.find(e=>e.id===args.id); const model=e.modelId || e.name+'-gpt'; return [{id:model,name:model,brand:'openai'}]; }
   if(cmd === 'external_sample') {
    const n = calls.filter(c=>c.cmd==='external_sample').length-1;
    return {text:Array.from({length:300},(_,i)=>(i*(17+(n%3)*6)+(n%3)*41)%355+1).join(', '),finish:'stop',reportedModel:'relay-returned',elapsedMs:80};
@@ -81,11 +82,18 @@ with sync_playwright() as p:
   expect(page.get_by_role('button', name='选择模型：relay-a.example.com-gpt', exact=True)).to_be_visible()
   start.click()
   result = page.get_by_role('article', name='检测结果')
+  expect(result).to_contain_text('2 / 3 有效样本', timeout=30000)
+  assert page.evaluate("calls.filter(c=>c.cmd==='external_sample').length") == 2
+  result.get_by_role('button', name='ModelTrace 对照').click()
+  expect(result).to_contain_text('同一批回答 · 独立排名')
+  result.get_by_role('button', name='补测第 3 次').click()
   expect(result).to_contain_text('3 / 3 有效样本', timeout=30000)
+  expect(result.get_by_role('button', name='补测第 3 次')).to_have_count(0)
   expect(result).to_contain_text('第三方 API · relay-a.example.com')
   samples = page.evaluate("calls.filter(c=>c.cmd==='external_sample').map(c=>c.args)")
   ida = page.evaluate("ext[0].id")
   assert len(samples) == 3 and all(c['id'] == ida and c['model'] == 'relay-a.example.com-gpt' for c in samples), samples
+  assert len({c['prompt'] for c in samples}) == 3 and len({c['revision'] for c in samples}) == 1
   assert not page.evaluate("calls.some(c=>c.cmd==='probe_sample'||c.cmd==='probe_models')")
   page.screenshot(path=f'/tmp/modellens-external-{engine.name}.png')
   # Edit A with empty key keeps its key; rename shows in picker.
@@ -93,9 +101,13 @@ with sync_playwright() as p:
   dialog = page.get_by_role('dialog')
   expect(dialog.get_by_label('Base URL')).to_have_value('https://relay-a.example.com/v1')
   dialog.get_by_label('名称').fill('Relay A')
-  dialog.get_by_role('button', name='保存并读取模型').click()
+  dialog.get_by_role('button', name='接口协议：Chat Completions').click()
+  dialog.get_by_role('option', name='Responses', exact=True).click()
+  dialog.get_by_label('模型 ID', exact=True).fill('gpt-test')
+  dialog.get_by_role('button', name='保存配置', exact=True).click()
   expect(picker).to_have_accessible_name('选择第三方 API：Relay A')
   assert page.evaluate("ext[0].key") == 'sk-a'
+  assert page.evaluate("ext[0].protocol === 'responses' && ext[0].modelId === 'gpt-test'")
   # Reload remembers source and selection.
   page.reload()
   expect(picker).to_have_accessible_name('选择第三方 API：Relay A')

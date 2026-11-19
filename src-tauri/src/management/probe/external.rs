@@ -1,6 +1,6 @@
-//! Third-party OpenAI-compatible endpoint (relay or vendor API) for model probing.
+//! Third-party relay or vendor API for model probing.
 //! The key is stored only in this app's private 0600 file and never returned to the webview.
-use super::{parse_models, response, Answer, Model};
+use super::{external_protocol::Protocol, parse_models, Answer, Model};
 use crate::management::{local_connection::LocalFile, transport};
 use reqwest::{
     blocking::{Client, Response},
@@ -9,11 +9,15 @@ use reqwest::{
     Url,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use serde_json::Value;
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 const FILE: &str = "external-api.json";
 const LIMIT: usize = 50;
+static WRITES: Mutex<()> = Mutex::new(());
 #[derive(Clone, Serialize, Deserialize)]
 struct Saved {
     #[serde(default)]
@@ -22,6 +26,12 @@ struct Saved {
     name: String,
     base_url: String,
     key: String,
+    #[serde(default)]
+    protocol: Protocol,
+    #[serde(default)]
+    model_id: String,
+    #[serde(default)]
+    revision: String,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct Store {
@@ -40,6 +50,9 @@ pub struct Entry {
     id: String,
     name: String,
     base_url: String,
+    protocol: Protocol,
+    model_id: String,
+    revision: String,
 }
 #[derive(Serialize)]
 pub struct SaveResult {
@@ -68,10 +81,29 @@ fn base(raw: &str) -> Result<Url, String> {
 fn valid_key(key: &str) -> bool {
     key.len() <= 8192 && key.trim() == key && !key.chars().any(char::is_control)
 }
+fn api_base(raw: &str, protocol: Protocol) -> Result<String, String> {
+    let url = base(raw)?;
+    let full = url.as_str().trim_end_matches('/');
+    for candidate in [Protocol::Chat, Protocol::Responses, Protocol::Messages] {
+        if url.path().trim_end_matches('/').ends_with(candidate.path()) {
+            if candidate != protocol {
+                return Err("API 地址中的接口路径与所选协议不一致".into());
+            }
+            return Ok(full[..full.len() - candidate.path().len()].to_owned());
+        }
+    }
+    if url.path() == "/" && protocol != Protocol::Chat {
+        return Ok(format!("{full}/v1"));
+    }
+    Ok(full.into())
+}
+fn valid_model(model: &str) -> bool {
+    !model.is_empty() && model.len() <= 512 && !model.chars().any(char::is_control)
+}
 fn request(saved: &Saved, body: Option<&Value>) -> Result<Response, String> {
     let url = base(&saved.base_url)?;
     let (path, timeout) = if body.is_some() {
-        ("/chat/completions", 120)
+        (saved.protocol.path(), 120)
     } else {
         ("/models", 25)
     };
@@ -89,12 +121,9 @@ fn request(saved: &Saved, body: Option<&Value>) -> Result<Response, String> {
         Some(body) => client.post(url).json(body),
         None => client.get(url),
     };
-    let request = if saved.key.is_empty() {
-        request
-    } else {
-        request.bearer_auth(&saved.key)
-    };
-    let response = request
+    let response = saved
+        .protocol
+        .authorize(request, &saved.key)
         .send()
         .map_err(|_| "无法连接第三方 API，或请求已超时".to_owned())?;
     let status = response.status().as_u16();
@@ -110,20 +139,25 @@ fn request(saved: &Saved, body: Option<&Value>) -> Result<Response, String> {
     Ok(response)
 }
 fn models(saved: &Saved) -> Result<Vec<Model>, String> {
+    if !saved.model_id.is_empty() {
+        return Ok(vec![Model {
+            id: saved.model_id.clone(),
+            name: saved.model_id.clone(),
+            brand: "unknown".into(),
+        }]);
+    }
     parse_models(&transport::read_json(request(saved, None)?)?, "data")
 }
 fn sample(saved: &Saved, model: &str, prompt: &str) -> Result<Answer, String> {
-    if model.is_empty()
-        || model.len() > 512
-        || model.chars().any(char::is_control)
+    if !valid_model(model)
+        || (!saved.model_id.is_empty() && saved.model_id != model)
         || prompt.trim().is_empty()
         || prompt.chars().count() > 4000
     {
         return Err("探查参数无效".into());
     }
     let started = Instant::now();
-    let payload = json!({"model":model,"stream":false,"max_tokens":6000,
-        "messages":[{"role":"user","content":prompt}]});
+    let payload = saved.protocol.payload(model, prompt);
     let reply = request(saved, Some(&payload))?;
     let is_stream = reply
         .headers()
@@ -132,9 +166,9 @@ fn sample(saved: &Saved, model: &str, prompt: &str) -> Result<Answer, String> {
         .and_then(|value| value.split(';').next())
         .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream"));
     let mut answer = if is_stream {
-        response::parse_stream(&transport::read_body(reply)?)?
+        saved.protocol.parse_stream(&transport::read_body(reply)?)?
     } else {
-        response::parse(&transport::read_json(reply)?)?
+        saved.protocol.parse(&transport::read_json(reply)?)?
     };
     answer.elapsed_ms = started.elapsed().as_millis() as u64;
     Ok(answer)
@@ -171,15 +205,29 @@ fn new_id() -> String {
         .as_nanos() as u64;
     format!("{nanos:x}{:x}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
-/// Validates, verifies by listing models, then upserts. Empty key keeps the edited entry's key.
+struct Profile<'a> {
+    name: &'a str,
+    base_url: &'a str,
+    key: String,
+    protocol: Protocol,
+    model_id: &'a str,
+}
+
+/// Verify the catalog when used. An explicit model ID defers authentication to sampling.
 fn save(
     store: &LocalFile,
     id: Option<String>,
-    name: &str,
-    base_url: &str,
-    key: String,
+    profile: Profile<'_>,
     list: impl Fn(&Saved) -> Result<Vec<Model>, String>,
 ) -> Result<SaveResult, String> {
+    let _guard = WRITES.lock().map_err(|_| "第三方 API 配置暂时不可用")?;
+    let Profile {
+        name,
+        base_url,
+        key,
+        protocol,
+        model_id,
+    } = profile;
     let mut all = read(store)?;
     let existing = id.as_ref().map(|id| {
         all.entries
@@ -188,8 +236,18 @@ fn save(
             .ok_or_else(|| "所选第三方 API 不存在，请重新选择".to_owned())
     });
     let existing = existing.transpose()?;
+    let base_url = api_base(base_url, protocol)?;
     let key = match (key.is_empty(), existing) {
-        (true, Some(i)) => all.entries[i].key.clone(),
+        (true, Some(i)) => {
+            let saved = &all.entries[i];
+            if !saved.key.is_empty() && base(&saved.base_url)?.origin() != base(&base_url)?.origin()
+            {
+                return Err(
+                    "更换 API 域名或端口时，请重新填写该地址的 Key；免 Key 接口可新建配置".into(),
+                );
+            }
+            saved.key.clone()
+        }
         _ => key,
     };
     if !valid_key(&key) {
@@ -199,12 +257,24 @@ fn save(
     if name.chars().count() > 60 || name.chars().any(char::is_control) {
         return Err("名称最多 60 个字符".into());
     }
-    let base_url: String = base(base_url)?.as_str().trim_end_matches('/').into();
+    let model_id = model_id.trim();
+    if !model_id.is_empty() && !valid_model(model_id) {
+        return Err("模型 ID 不合法".into());
+    }
     let entry = Saved {
-        id: existing.map(|i| all.entries[i].id.clone()).unwrap_or_else(new_id),
-        name: if name.is_empty() { host(&base_url) } else { name.into() },
+        id: existing
+            .map(|i| all.entries[i].id.clone())
+            .unwrap_or_else(new_id),
+        name: if name.is_empty() {
+            host(&base_url)
+        } else {
+            name.into()
+        },
         base_url,
         key,
+        protocol,
+        model_id: model_id.into(),
+        revision: new_id(),
     };
     if existing.is_none() && all.entries.len() >= LIMIT {
         return Err(format!("最多保存 {LIMIT} 个第三方 API"));
@@ -221,6 +291,7 @@ fn save(
     Ok(SaveResult { id, models })
 }
 fn forget(store: &LocalFile, id: &str) -> Result<(), String> {
+    let _guard = WRITES.lock().map_err(|_| "第三方 API 配置暂时不可用")?;
     let mut all = read(store)?;
     let before = all.entries.len();
     all.entries.retain(|e| e.id != id);
@@ -250,8 +321,15 @@ pub async fn external_list(app: tauri::AppHandle) -> Result<Vec<Entry>, String> 
             .into_iter()
             .map(|e| Entry {
                 id: e.id,
-                name: if e.name.is_empty() { host(&e.base_url) } else { e.name },
+                name: if e.name.is_empty() {
+                    host(&e.base_url)
+                } else {
+                    e.name
+                },
                 base_url: e.base_url,
+                protocol: e.protocol,
+                model_id: e.model_id,
+                revision: e.revision,
             })
             .collect())
     })
@@ -264,8 +342,24 @@ pub async fn external_save(
     name: String,
     base_url: String,
     key: String,
+    protocol: Protocol,
+    model_id: String,
 ) -> Result<SaveResult, String> {
-    blocking(move || save(&LocalFile::named(&app, FILE)?, id, &name, &base_url, key, models)).await
+    blocking(move || {
+        save(
+            &LocalFile::named(&app, FILE)?,
+            id,
+            Profile {
+                name: &name,
+                base_url: &base_url,
+                key,
+                protocol,
+                model_id: &model_id,
+            },
+            models,
+        )
+    })
+    .await
 }
 #[tauri::command]
 pub async fn external_forget(app: tauri::AppHandle, id: String) -> Result<(), String> {
@@ -279,15 +373,45 @@ pub async fn external_models(app: tauri::AppHandle, id: String) -> Result<Vec<Mo
 pub async fn external_sample(
     app: tauri::AppHandle,
     id: String,
+    revision: String,
     model: String,
     prompt: String,
 ) -> Result<Answer, String> {
-    blocking(move || sample(&load(&LocalFile::named(&app, FILE)?, &id)?, &model, &prompt)).await
+    blocking(move || {
+        let saved = load(&LocalFile::named(&app, FILE)?, &id)?;
+        if saved.revision != revision {
+            return Err("第三方 API 配置已更新，请重新开始检测".into());
+        }
+        sample(&saved, &model, &prompt)
+    })
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    fn save_chat(
+        store: &LocalFile,
+        id: Option<String>,
+        name: &str,
+        base_url: &str,
+        key: String,
+        list: impl Fn(&Saved) -> Result<Vec<Model>, String>,
+    ) -> Result<SaveResult, String> {
+        save(
+            store,
+            id,
+            Profile {
+                name,
+                base_url,
+                key,
+                protocol: Protocol::Chat,
+                model_id: "",
+            },
+            list,
+        )
+    }
     use crate::management::tests::{server, server_with_bodies};
     fn saved(port: u16) -> Saved {
         Saved {
@@ -295,6 +419,9 @@ mod tests {
             name: String::new(),
             base_url: format!("http://127.0.0.1:{port}/v1"),
             key: "third-party-secret".into(),
+            protocol: Protocol::Chat,
+            model_id: String::new(),
+            revision: String::new(),
         }
     }
     #[test]
@@ -314,8 +441,14 @@ mod tests {
     #[test]
     fn lists_and_samples_with_key_under_base_path() {
         let (port, task) = server(vec![
-            (200, json!({"data":[{"id":"relay/gpt","owned_by":"openai"},{"id":"other"}]})),
-            (200, json!({"model":"relay-returned","choices":[{"message":{"content":"1, 2"},"finish_reason":"stop"}]})),
+            (
+                200,
+                json!({"data":[{"id":"relay/gpt","owned_by":"openai"},{"id":"other"}]}),
+            ),
+            (
+                200,
+                json!({"model":"relay-returned","choices":[{"message":{"content":"1, 2"},"finish_reason":"stop"}]}),
+            ),
         ]);
         let s = saved(port);
         assert_eq!(models(&s).unwrap().len(), 2);
@@ -324,19 +457,103 @@ mod tests {
         let requests = task.join().unwrap();
         assert!(requests[0].starts_with("GET /v1/models "));
         assert!(requests[1].starts_with("POST /v1/chat/completions "));
-        assert!(requests.iter().all(|r| r.contains("Bearer third-party-secret")));
+        assert!(requests
+            .iter()
+            .all(|r| r.contains("Bearer third-party-secret")));
         assert!(requests[1].contains("\"model\":\"relay/gpt\""));
+    }
+    #[test]
+    fn responses_uses_full_endpoint_with_explicit_model_and_no_catalog_request() {
+        let (port, task) = server(vec![(
+            200,
+            json!({"model":"observed","status":"completed","output":[
+                {"type":"reasoning","summary":[]},
+                {"type":"message","role":"assistant","content":[{"type":"output_text","text":"1, 2"}]}
+            ]}),
+        )]);
+        let dir = tempfile::tempdir().unwrap();
+        let store = LocalFile::at(dir.path().join(FILE));
+        let url = format!("http://127.0.0.1:{port}/custom/v1/responses");
+        assert!(api_base(&url, Protocol::Chat).is_err());
+        let result = save(
+            &store,
+            None,
+            Profile {
+                name: "Responses relay",
+                base_url: &url,
+                key: "test-key".into(),
+                protocol: Protocol::Responses,
+                model_id: "explicit/model",
+            },
+            models,
+        )
+        .unwrap();
+        assert_eq!(result.models[0].id, "explicit/model");
+        let saved = load(&store, &result.id).unwrap();
+        assert!(!saved.revision.is_empty());
+        assert!(sample(&saved, "other-model", "probe").is_err());
+        let answer = sample(&saved, "explicit/model", "probe").unwrap();
+        assert_eq!(
+            (
+                answer.text.as_str(),
+                answer.finish.as_str(),
+                answer.reported_model.as_str()
+            ),
+            ("1, 2", "stop", "observed")
+        );
+        let requests = task.join().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].starts_with("POST /custom/v1/responses "));
+        assert!(requests[0].contains("Bearer test-key"));
+        assert!(requests[0].contains("\"input\":\"probe\""));
+        assert!(requests[0].contains("\"store\":false"));
+    }
+    #[test]
+    fn messages_lists_and_samples_with_anthropic_headers() {
+        let (port, task) = server(vec![
+            (
+                200,
+                json!({"data":[{"id":"claude-relay","display_name":"Relay Claude"}]}),
+            ),
+            (
+                200,
+                json!({"type":"message","model":"observed","stop_reason":"end_turn","content":[
+                    {"type":"thinking","thinking":"99"},{"type":"text","text":"1, 2"}
+                ]}),
+            ),
+        ]);
+        let mut saved = saved(port);
+        saved.protocol = Protocol::Messages;
+        assert_eq!(models(&saved).unwrap()[0].name, "Relay Claude");
+        let answer = sample(&saved, "claude-relay", "probe").unwrap();
+        assert_eq!(
+            (answer.text.as_str(), answer.finish.as_str()),
+            ("1, 2", "stop")
+        );
+        let requests = task.join().unwrap();
+        assert!(requests[0].starts_with("GET /v1/models "));
+        assert!(requests[1].starts_with("POST /v1/messages "));
+        assert!(requests.iter().all(|r| {
+            let lower = r.to_ascii_lowercase();
+            lower.contains("anthropic-version: 2023-06-01")
+                && lower.contains("x-api-key: third-party-secret")
+                && !lower.contains("authorization:")
+        }));
+        assert!(requests[1].contains("\"max_tokens\":8192"));
     }
     #[test]
     fn saves_and_probes_without_authorization() {
         let (port, task) = server(vec![
             (200, json!({"data":[{"id":"local-model"}]})),
-            (200, json!({"model":"local-model","choices":[{"message":{"content":"1, 2"},"finish_reason":"stop"}]})),
+            (
+                200,
+                json!({"model":"local-model","choices":[{"message":{"content":"1, 2"},"finish_reason":"stop"}]}),
+            ),
         ]);
         let dir = tempfile::tempdir().unwrap();
         let store = LocalFile::at(dir.path().join(FILE));
         let url = format!("http://127.0.0.1:{port}/v1");
-        let result = save(&store, None, "", &url, String::new(), models).unwrap();
+        let result = save_chat(&store, None, "", &url, String::new(), models).unwrap();
         assert_eq!(result.models.len(), 1);
         let entry = load(&store, &result.id).unwrap();
         assert!(entry.key.is_empty());
@@ -358,8 +575,11 @@ mod tests {
             "data: {\"choices\":[],\"usage\":{}}\r\n\r\n",
             "data: [DONE]\r\n\r\n",
         );
-        let (port, task) =
-            server_with_bodies(vec![(200, "text/event-stream; charset=utf-8", stream.into())]);
+        let (port, task) = server_with_bodies(vec![(
+            200,
+            "text/event-stream; charset=utf-8",
+            stream.into(),
+        )]);
         let answer = sample(&saved(port), "relay-model", "prompt").unwrap();
         assert_eq!(answer.text, "1, 2");
         assert_eq!(answer.finish, "stop");
@@ -368,9 +588,15 @@ mod tests {
     }
     #[test]
     fn errors_are_redacted_and_redirects_not_followed() {
-        let (port, task) = server(vec![(401, json!({"error":"secret detail"})), (302, json!({}))]);
+        let (port, task) = server(vec![
+            (401, json!({"error":"secret detail"})),
+            (302, json!({})),
+        ]);
         let s = saved(port);
-        assert_eq!(models(&s).err().unwrap(), "第三方 API 认证失败，请检查 API Key");
+        assert_eq!(
+            models(&s).err().unwrap(),
+            "第三方 API 认证失败，请检查 API Key"
+        );
         assert!(models(&s).err().unwrap().contains("重定向"));
         assert_eq!(task.join().unwrap().len(), 2);
     }
@@ -382,25 +608,74 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE);
         let store = LocalFile::at(path.clone());
-        let a = save(&store, None, "", "https://a.example.com/v1/", "key-a".into(), ok).unwrap().id;
-        let b = save(&store, None, "Relay B", "https://b.example.com/v1", "key-b".into(), ok).unwrap().id;
+        let a = save_chat(
+            &store,
+            None,
+            "",
+            "https://a.example.com/v1/",
+            "key-a".into(),
+            ok,
+        )
+        .unwrap()
+        .id;
+        let b = save_chat(
+            &store,
+            None,
+            "Relay B",
+            "https://b.example.com/v1",
+            "key-b".into(),
+            ok,
+        )
+        .unwrap()
+        .id;
         assert_ne!(a, b);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
         let all = read(&store).unwrap().entries;
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "a.example.com");
         assert_eq!(all[0].base_url, "https://a.example.com/v1");
+        assert!(save_chat(
+            &store,
+            Some(a.clone()),
+            "A2",
+            "https://a2.example.com/v1",
+            String::new(),
+            |_| { panic!("old key must not be sent to a new origin") }
+        )
+        .is_err());
         // Editing with an empty key keeps that entry's own key.
-        save(&store, Some(a.clone()), "A2", "https://a2.example.com/v1", String::new(), ok).unwrap();
+        save_chat(
+            &store,
+            Some(a.clone()),
+            "A2",
+            "https://a.example.com:443/custom/v1",
+            String::new(),
+            ok,
+        )
+        .unwrap();
         let edited = load(&store, &a).unwrap();
-        assert!(edited.key == "key-a" && edited.name == "A2" && edited.base_url.contains("a2."));
+        assert_ne!(edited.revision, all[0].revision);
+        assert!(
+            edited.key == "key-a" && edited.name == "A2" && edited.base_url.ends_with("/custom/v1")
+        );
         assert_eq!(load(&store, &b).unwrap().key, "key-b");
-        assert!(save(&store, None, "", "https://c.example.com", " ".into(), ok).is_err());
-        assert!(save(&store, Some("missing".into()), "", "https://c.example.com", "k".into(), ok).is_err());
+        assert!(save_chat(&store, None, "", "https://c.example.com", " ".into(), ok).is_err());
+        assert!(save_chat(
+            &store,
+            Some("missing".into()),
+            "",
+            "https://c.example.com",
+            "k".into(),
+            ok
+        )
+        .is_err());
         forget(&store, &a).unwrap();
         assert!(load(&store, &a).is_err());
         assert_eq!(read(&store).unwrap().entries.len(), 1);
@@ -412,19 +687,40 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = LocalFile::at(dir.path().join(FILE));
         let fail = |_: &Saved| -> Result<Vec<Model>, String> { Err("auth".into()) };
-        assert!(save(&store, None, "", "https://a.example.com/v1", "k".into(), fail).is_err());
+        assert!(save_chat(
+            &store,
+            None,
+            "",
+            "https://a.example.com/v1",
+            "k".into(),
+            fail
+        )
+        .is_err());
         assert!(read(&store).unwrap().entries.is_empty());
     }
     #[test]
     fn single_record_from_0_2_24_is_migrated() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE);
-        std::fs::write(&path, r#"{"base_url":"https://old.example.com/v1","key":"old-key"}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"base_url":"https://old.example.com/v1","key":"old-key"}"#,
+        )
+        .unwrap();
         let store = LocalFile::at(path);
         let all = read(&store).unwrap().entries;
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, "legacy");
-        save(&store, None, "", "https://new.example.com/v1", "new-key".into(), ok).unwrap();
+        assert!(all[0].protocol == Protocol::Chat && all[0].revision.is_empty());
+        save_chat(
+            &store,
+            None,
+            "",
+            "https://new.example.com/v1",
+            "new-key".into(),
+            ok,
+        )
+        .unwrap();
         assert_eq!(load(&store, "legacy").unwrap().key, "old-key");
         assert_eq!(read(&store).unwrap().entries.len(), 2);
     }

@@ -1,5 +1,7 @@
 import bankUrl from "./vendor/unified_bank.json?url";
 import artifactUrl from "./vendor/shared_detector.json?url";
+import modelTraceUrl from "./vendor/modeltrace/unified_bank.json?url";
+import { analyzeGlobalOutputs } from "./vendor/modeltrace/fingerprint-core.js";
 import { analyzeSamples, type Sample } from "./analysis";
 import type { Bank } from "./vendor/types";
 import type { SharedDetector } from "./vendor/shared-detector";
@@ -14,8 +16,15 @@ async function read<T>(url: string, expected: string): Promise<T> {
   if (hash !== expected) throw new Error("本地参考库校验失败");
   return JSON.parse(new TextDecoder().decode(bytes));
 }
-self.onmessage = async (event: MessageEvent<Sample[]>) => {
+self.onmessage = async (event: MessageEvent<{ samples: Sample[]; modelTrace: boolean }>) => {
   try {
+    const { samples, modelTrace } = event.data;
+    if (modelTrace) {
+      const bank = await read<unknown>(modelTraceUrl, "f267d0513aa06981d024ec5394746fceddf44e4e8a75fa6bf8304255f4b32d6d");
+      const ranking = analyzeGlobalOutputs(samples, bank).results;
+      self.postMessage({ result: ranking.slice(0, 3).map((item) => item.display_name) });
+      return;
+    }
     const [bank, artifact] = await Promise.all([
       read<Bank>(
         bankUrl,
@@ -26,7 +35,7 @@ self.onmessage = async (event: MessageEvent<Sample[]>) => {
         "d5290bbaf02c1906191a40ef745c7b2fbc865a2feea5dae38e3d049985639926",
       ),
     ]);
-    self.postMessage({ result: analyzeSamples(event.data, bank, artifact) });
+    self.postMessage({ result: analyzeSamples(samples, bank, artifact) });
   } catch (e) {
     self.postMessage({
       error: e instanceof Error ? e.message : "本地分析失败",

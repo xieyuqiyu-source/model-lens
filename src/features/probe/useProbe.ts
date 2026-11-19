@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ManagementSnapshot } from "../credentials/data";
 import { native } from "../service/api";
 import { generateChallenges } from "./vendor/challenge.js";
-import { analyze, currentBank, probeApi, type ExternalEntry, type ProbeModel } from "./api";
+import { analyze, compareModelTrace, currentBank, probeApi, type ExternalEntry, type ExternalProfile, type ProbeModel } from "./api";
 import { collectSamples } from "./run";
 import type { Challenge, ProbeRecord, Sample } from "./analysis";
 export function useProbe(credentials: ManagementSnapshot) {
@@ -64,6 +64,7 @@ export function useProbe(credentials: ManagementSnapshot) {
   const [attempts, setAttempts] = useState<Sample[]>([]);
   const [result, setResult] = useState<ProbeRecord | null>(null);
   const [history, setHistory] = useState<ProbeRecord[]>([]);
+  const [pendingThird, setPendingThird] = useState<{ recordId: string; entry: ExternalEntry; challenge: Challenge } | null>(null);
   const active = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const id = credential?.id ?? "";
@@ -102,9 +103,16 @@ export function useProbe(credentials: ManagementSnapshot) {
     return () => {
       cancelled = true;
     };
-  }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, entry?.id, entry?.baseUrl]);
-  async function run() {
+  }, [credentials.connected, credentials.port, enabledKey, id, refresh, external, entry?.id, entry?.revision]);
+  const canSupplement = !manual && external && !catalogBusy && !!pendingThird && !!result && !!entry &&
+    result.id === pendingThird.recordId && result.model === model?.id &&
+    entry.id === pendingThird.entry.id && entry.revision === pendingThird.entry.revision;
+  async function run(addThird = false) {
     if (active.current) return;
+    if (addThird && !canSupplement) return;
+    const previous = addThird ? result : null;
+    const pending = addThird ? pendingThird : null;
+    const relay = manual || !external ? undefined : pending?.entry ?? entry;
     const pasted: Sample[] = manual
       ? challenges
           .map((challenge, i) => ({ ...challenge, slot: i + 1, text: answers[i] }))
@@ -123,49 +131,57 @@ export function useProbe(credentials: ManagementSnapshot) {
     setBusy(true);
     setStopping(false);
     setError("");
-    setResult(null);
-    setAttempts(pasted);
+    setPendingThird(null);
+    if (!previous) setResult(null);
+    setAttempts(previous?.attempts ?? pasted);
     try {
-      const bank = await currentBank();
+      const bank = previous?.referenceBank ?? await currentBank();
       controller.signal.throwIfAborted();
+      const questions = pending ? [pending.challenge] : relay ? challenges.slice(0, 2) : challenges;
       const collected = manual
         ? { samples: pasted, attempts: pasted, warnings: [] }
         : await collectSamples(
-            challenges,
+            questions,
             (prompt) =>
-              external
-                ? probeApi.externalSample(entry!.id, model!.id, prompt)
+              relay
+                ? probeApi.externalSample(relay, model!.id, prompt)
                 : probeApi.sample(id, model!.id, prompt),
             controller.signal,
             (current, rows) => {
               if (mounted.current) {
-                setPhase(`采样 ${current} / 3`);
-                setAttempts(rows);
+                setPhase(`采样 ${current} / ${pending ? 3 : questions.length}`);
+                setAttempts([...(previous?.attempts ?? []), ...rows]);
               }
             },
+            pending ? 3 : 1,
           );
-      const outputs = collected.samples;
-      const all = collected.attempts;
-      const warnings = collected.warnings;
+      const outputs = [...(previous?.samples ?? []), ...collected.samples];
+      const all = [...(previous?.attempts ?? []), ...collected.attempts];
+      const warnings = [...(previous?.warnings ?? []), ...collected.warnings];
       if (!outputs.length)
         throw new Error(warnings.join("；") || "未取得有效回答");
       controller.signal.throwIfAborted();
       setPhase("本地分析中…");
-      const detection = await analyze(outputs, controller.signal, bank.version);
+      const [detection, modelTrace] = await Promise.all([
+        previous && !collected.samples.length ? previous : analyze(outputs, controller.signal, bank.version),
+        relay ? compareModelTrace(outputs, controller.signal).catch(() => []) : undefined,
+      ]);
       if (!mounted.current || controller.signal.aborted) return;
       const record: ProbeRecord = {
         ...detection,
-        warnings: [...warnings, ...detection.warnings],
-        id: crypto.randomUUID(),
-        at: Date.now(),
+        warnings: [...new Set([...warnings, ...detection.warnings])],
+        id: previous?.id ?? crypto.randomUUID(),
+        at: previous?.at ?? Date.now(),
         source: manual ? "manual" : "auto",
         model: manual ? "手动回答" : model!.id,
-        credential: manual ? "" : external ? `第三方 API · ${entry!.name}` : "CLIProxy 自动路由",
+        credential: manual ? "" : relay ? `第三方 API · ${relay.name}` : "CLIProxy 自动路由",
         attempts: all,
+        modelTrace,
       };
       setAttempts(all);
       setResult(record);
-      setHistory((old) => [record, ...old].slice(0, 10));
+      setHistory((old) => [record, ...old.filter((item) => item.id !== record.id)].slice(0, 10));
+      if (relay && !previous) setPendingThird({ recordId: record.id, entry: relay, challenge: challenges[2] });
     } catch (e) {
       if (mounted.current)
         setError(
@@ -223,8 +239,8 @@ export function useProbe(credentials: ManagementSnapshot) {
         /* Optional preference. */
       }
     },
-    saveExternal: async (id: string | null, name: string, baseUrl: string, key: string) => {
-      const saved = await probeApi.externalSave(id, name, baseUrl, key);
+    saveExternal: async (id: string | null, profile: ExternalProfile, key: string) => {
+      const saved = await probeApi.externalSave(id, profile, key);
       await loadEntries();
       setEntryIdState(saved.id);
       store("externalId", saved.id);
@@ -263,6 +279,7 @@ export function useProbe(credentials: ManagementSnapshot) {
     result,
     history,
     run,
+    canSupplement,
     stop: () => {
       active.current?.abort();
       setStopping(true);
@@ -271,6 +288,7 @@ export function useProbe(credentials: ManagementSnapshot) {
       if (!active.current) {
         setChallenges(generateChallenges(3, challenges.map((challenge) => challenge.expected_count)));
         setAnswers(["", "", ""]);
+        setPendingThird(null);
         setResult(null);
         setAttempts([]);
         setError("");
