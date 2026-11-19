@@ -7,5 +7,7 @@
 - Windows Server 2025 x64 上通过 93 项 Rust 测试和 25 项界面逻辑测试。真实原生目录选择器可填入默认安装路径。应用通过临时 Git 仓库和合成 Go 服务完成克隆、编译、自动连接、目录发现、快进更新、收到正常关闭信号并退出、重新启动，以及新版启动失败后恢复原程序与配置。验收还核对新配置文件的 Windows ACL。[端到端验收](https://github.com/xieyuqiyu-source/model-lens/actions/runs/44464730503)
 - 在临时目录克隆 CLIProxyAPI 官方源码 `db7f177`，使用 Go 1.26.1 交叉编译为 Windows amd64 可执行文件，并核对其中的 Go 模块和 VCS 元数据。
 - Apple Silicon 上通过 `pnpm check`、105 项串行 Rust 测试、WebKit 和 Chromium 服务面板合成回归、`pnpm package` 与 `codesign --verify --deep --strict`。
+- 从通过验收的运行下载 x64 安装包，验证 GitHub Actions 产物的 SHA-256 后在发布机签名，上传到「超级 Linux」。在线更新清单指向 0.2.31，通过 HTTPS 下载完整安装包所得 SHA-256 与本地一致。单独验证了 Tauri 签名，改动过的安装包会被拒绝。[安装包](https://www.ccoos.cn/modellens/windows/releases/0.2.31/ModelLens_0.2.31_x64-setup.exe) · [SHA-256](https://www.ccoos.cn/modellens/windows/releases/0.2.31/SHA256SUMS)
+- Windows Server 2025 x64 上，旧测试版 0.0.0 从正式 HTTPS 源签名更新到 0.2.31，自动重启并恢复合成连接。线上安装包通过 CLIProxy 三次自动采样、第三方 API 三次自动采样和手动粘贴评分，手动评分期间未发起采样请求。[线上升级和模型探查验收](https://github.com/xieyuqiyu-source/model-lens/actions/runs/44465877476)
 
 Windows 验收使用合成凭证与服务。安装步骤和已有服务边界见 [Windows 开发说明](../windows/README.md)。
