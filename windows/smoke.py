@@ -138,7 +138,58 @@ def prepare_fixture(root):
     return upstream, source, env
 
 
-def verify_service(page, root, upstream, source):
+def verify_directory_picker(dialog, pid, directory):
+    import ctypes
+    from ctypes import wintypes
+
+    user = ctypes.windll.user32
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = (callback, wintypes.LPARAM)
+    user.EnumChildWindows.argtypes = (wintypes.HWND, callback, wintypes.LPARAM)
+    user.GetClassNameW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+    user.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    user.IsWindowVisible.argtypes = (wintypes.HWND,)
+    user.SendMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+    user.PostMessageW.argtypes = user.SendMessageW.argtypes
+    target = []
+
+    def class_name(hwnd):
+        name = ctypes.create_unicode_buffer(64)
+        user.GetClassNameW(hwnd, name, len(name))
+        return name.value
+
+    @callback
+    def find_picker(hwnd, _):
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value != pid or not user.IsWindowVisible(hwnd) or class_name(hwnd) != "#32770":
+            return True
+
+        @callback
+        def find_edit(control, _):
+            if class_name(control) == "Edit" and user.IsWindowVisible(control):
+                target.append((hwnd, control))
+                return False
+            return True
+
+        user.EnumChildWindows(hwnd, find_edit, 0)
+        return not target
+
+    dialog.get_by_role("button", name="选择目录", exact=True).click(no_wait_after=True)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not target:
+        user.EnumWindows(find_picker, 0)
+        if not target:
+            time.sleep(0.1)
+    assert target, "Windows 原生目录选择器未显示"
+    hwnd, edit = target[0]
+    path = ctypes.create_unicode_buffer(str(directory))
+    assert user.SendMessageW(edit, 0x000C, 0, ctypes.addressof(path))
+    assert user.PostMessageW(hwnd, 0x0111, 1, 0)
+    expect(dialog.get_by_role("textbox", name="CLIProxy 安装路径")).to_have_value(str(directory / "CLIProxy"), timeout=10000)
+
+
+def verify_service(page, pid, root, upstream, source):
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -146,6 +197,7 @@ def verify_service(page, root, upstream, source):
     page.locator(".titlebar .service-status").click()
     dialog = page.get_by_role("dialog", name="本机 CLIProxy")
     dialog.get_by_role("button", name="安装 CLIProxy", exact=True).click()
+    verify_directory_picker(dialog, pid, root)
     dialog.get_by_role("spinbutton", name="CPA 端口").fill(str(port))
     dialog.get_by_role("textbox", name="CLIProxy 安装路径").fill(str(install_path))
     dialog.get_by_role("button", name="安装并启动", exact=True).click()
@@ -230,7 +282,7 @@ def main(installer, expected_update):
             verify_ui(browser, page, server.server_port)
             print(f"Windows {expected} 安装成功，CLIProxy、模型目录、剪贴板和托盘已核验。", flush=True)
             if not expected_update:
-                verify_service(page, upstream.parent, upstream, source)
+                verify_service(page, process.pid, upstream.parent, upstream, source)
             dialog = settings(page)
             expect(dialog.get_by_role("button", name="检查应用更新")).to_be_visible()
             if expected_update:

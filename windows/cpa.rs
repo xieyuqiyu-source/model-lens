@@ -33,8 +33,8 @@ use windows_sys::Win32::{
     },
     UI::{
         Shell::{
-            SHBrowseForFolderW, SHGetPathFromIDListEx, ShellExecuteW, BIF_NEWDIALOGSTYLE,
-            BIF_RETURNONLYFSDIRS, BROWSEINFOW, GPFIDL_DEFAULT,
+            SHBrowseForFolderW, SHGetPathFromIDListEx, ShellExecuteW, BIF_EDITBOX,
+            BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW, GPFIDL_DEFAULT,
         },
         WindowsAndMessaging::SW_SHOWNORMAL,
     },
@@ -219,10 +219,12 @@ pub(crate) fn choose_parent(hwnd: usize) -> Result<Option<String>, String> {
         return Err("无法初始化 Windows 目录选择器".into());
     }
     let title = wide("选择 CLIProxy 安装目录的上一级");
+    let mut display_name = [0u16; 260];
     let options = BROWSEINFOW {
         hwndOwner: hwnd as HWND,
+        pszDisplayName: display_name.as_mut_ptr(),
         lpszTitle: title.as_ptr(),
-        ulFlags: BIF_NEWDIALOGSTYLE | BIF_RETURNONLYFSDIRS,
+        ulFlags: BIF_NEWDIALOGSTYLE | BIF_EDITBOX | BIF_RETURNONLYFSDIRS,
         ..Default::default()
     };
     let item = unsafe { SHBrowseForFolderW(&options) };
