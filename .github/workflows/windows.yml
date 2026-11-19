@@ -48,7 +48,7 @@ jobs:
           rustup target add x86_64-pc-windows-msvc
           pnpm install --frozen-lockfile
       - name: Build Windows NSIS installer
-        run: pnpm exec tauri build --ci --target x86_64-pc-windows-msvc --config windows/tauri.conf.json -- --locked
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-pc-windows-msvc --config windows/tauri.conf.json -- --locked
       - name: Run Windows unit tests
         run: |
           $env:TAURI_CONFIG = Get-Content windows/tauri.conf.json -Raw

@@ -34,8 +34,21 @@ impl LocalFile {
     pub(super) fn at(path: std::path::PathBuf) -> Self {
         Self { path }
     }
+    #[cfg(windows)]
+    fn check_directory(&self) -> Result<(), String> {
+        let directory = self.path.parent().ok_or("本机连接目录无效")?;
+        match std::fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.is_dir() && !crate::windows::is_reparse_point(&metadata) => {
+                Ok(())
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err("本机连接目录无效，请检查数据目录权限".into()),
+        }
+    }
     pub(super) fn read<T: DeserializeOwned>(&self) -> Result<Option<T>, String> {
         use std::io::Read;
+        #[cfg(windows)]
+        self.check_directory()?;
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
         #[cfg(unix)]
@@ -92,9 +105,7 @@ impl LocalFile {
                 return Err("invalid connection directory".into());
             }
             #[cfg(windows)]
-            if crate::windows::is_reparse_point(&metadata) {
-                return Err("invalid connection directory".into());
-            }
+            self.check_directory()?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -114,6 +125,8 @@ impl LocalFile {
             .map_err(|_| "连接成功，但本机文件保存失败；重启后仍使用此前保存的连接（若有）".into())
     }
     pub(super) fn remove(&self) -> Result<(), String> {
+        #[cfg(windows)]
+        self.check_directory()?;
         match std::fs::remove_file(&self.path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

@@ -38,7 +38,8 @@
     ],
     "icon": [
       "../windows/icon.ico"
-    ]
+    ],
+    "windows": { "allowDowngrades": false }
   },
   "plugins": {
     "updater": {

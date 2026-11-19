@@ -112,15 +112,15 @@ fn main() {
         }
         return;
     }
-    let builder = tauri::Builder::default();
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            show_main(app)
+        }));
     #[cfg(target_os = "macos")]
     let builder = builder.manage(DiscoveryLock(Mutex::new(())));
     #[cfg(windows)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            show_main(app)
-        }))
         .manage(management::Management::default())
         .manage(reference_bank::BankState::default())
         .invoke_handler(tauri::generate_handler![

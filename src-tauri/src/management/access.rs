@@ -12,7 +12,7 @@ fn copy_key(
 }
 
 #[cfg(target_os = "macos")]
-fn clipboard(value: &str) -> Result<(), String> {
+fn clipboard(_: &tauri::AppHandle, value: &str) -> Result<(), String> {
     use std::{
         io::Write,
         process::{Command, Stdio},
@@ -35,13 +35,23 @@ fn clipboard(value: &str) -> Result<(), String> {
     Ok(())
 }
 #[cfg(windows)]
-fn clipboard(value: &str) -> Result<(), String> {
-    clipboard_win::set_clipboard_string(value).map_err(|_| "无法写入剪贴板".into())
+fn clipboard(app: &tauri::AppHandle, value: &str) -> Result<(), String> {
+    use tauri::Manager;
+    let error = "无法写入剪贴板";
+    let window = app.get_webview_window("main").ok_or(error)?;
+    let hwnd = window.hwnd().map_err(|_| error)?;
+    let _clipboard = clipboard_win::Clipboard::new_attempts_for(hwnd.0, 10).map_err(|_| error)?;
+    use clipboard_win::{options::NoClear, raw};
+    let private =
+        raw::register_format("ExcludeClipboardContentFromMonitorProcessing").ok_or(error)?;
+    raw::empty().map_err(|_| error)?;
+    raw::set_without_clear(private.get(), &[1]).map_err(|_| error)?;
+    raw::set_string_with(value, NoClear).map_err(|_| error.into())
 }
 
 #[tauri::command]
 pub async fn copy_client_key(app: tauri::AppHandle) -> Result<Snapshot, String> {
-    operate(app, |s, _| copy_key(s, clipboard)).await
+    operate(app, |s, app| copy_key(s, |key| clipboard(app, key))).await
 }
 
 #[cfg(test)]
