@@ -6,7 +6,7 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 
 **当前版本：0.2.31 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
 
-[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.30.md)
+[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.31.md)
 
 ## 界面预览
 
@@ -72,7 +72,7 @@ pnpm package
 
 ### 2. 连接本机 CLIProxy
 
-1. 使用原来的方式启动 CLIProxy。
+1. 使用原来的方式启动 CLIProxy，或在顶部「本机 CLIProxy」面板选择「安装 CLIProxy」。
 2. 打开 ModelLens，在连接窗口填写本机管理端口（默认 `8317`）和 **CLIProxy 管理密钥**。
 3. 连接后查看凭证与模型目录；额度先恢复本地缓存，之后每五分钟刷新，也可以手动刷新。
 4. 在“探查优先”选择模型并开始检测，或在凭证列表点击试管图标测试指定账号。
