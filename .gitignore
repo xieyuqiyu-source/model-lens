@@ -18,6 +18,8 @@ src-tauri/target/
 src-tauri/gen/
 /windows/target/
 /windows/artifacts/
+/release/artifacts/
+__pycache__/
 .impeccable/
 *.tsbuildinfo
 

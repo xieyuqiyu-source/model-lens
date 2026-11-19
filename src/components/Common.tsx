@@ -49,17 +49,19 @@ export function Modal({
   title,
   children,
   onClose,
+  dismissible = true,
 }: {
   title: string;
   children: ReactNode | ((dismiss: () => void) => ReactNode);
   onClose: () => void;
+  dismissible?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const heading = useId();
   const [closing, setClosing] = useState(false);
   const animation = useRef<Animation | null>(null);
   const dismiss = () => {
-    if (!animation.current) {
+    if (dismissible && !animation.current) {
       setClosing(true);
       animation.current = dismissSurface(ref.current, () => {
         // 在卸载前关闭，让原生 dialog 将键盘焦点还给入口。
@@ -104,6 +106,7 @@ export function Modal({
           type="button"
           className="icon-button"
           aria-label="关闭"
+          disabled={!dismissible}
           onClick={dismiss}
         >
           <X />

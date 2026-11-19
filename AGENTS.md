@@ -154,3 +154,8 @@
 - Windows 共用 macOS 的服务面板、任务互斥、版本与 Git 快进更新，原生实现放在 `windows/cpa.rs` 和 `windows/cpa_process.rs`。用户选择安装上级目录或手填新路径，固定克隆官方仓库到 `<安装目录>\CLIProxyApi`，程序位于 `<安装目录>\.dev\cli-proxy-api.exe`。
 - 安装配置和备份仅写本机磁盘，Windows ACL 限制为当前用户与 SYSTEM。发现已有独立目录或外部托管实例后仍可显式安装到独立新目录和空闲端口。CPSwitch、EasyCLIProxyAPI 的内置程序只发现，保留其运行控制。
 - 退出必须核对进程句柄、可执行路径、端口和私有控制台。同一路径有多个进程、共享控制台或不明归属时保留进程。Windows 开发验收使用合成 Git 仓库、Go 程序与管理接口。
+
+## 0.2.32 Mac 应用更新
+
+- Apple Silicon Mac 支持自动检查、用户确认安装和重启。Mac 使用独立的更新公钥及「超级 Linux」`/modellens/macos/` 路径，Windows 同服务器独立发布。共享发布脚本放在 `release/`，Mac 构建和发布见中文 README。
+- 只在主窗口安装。Mac 后端先下载与验签，再核对并锁住管理会话；替换期间拦截普通退出，正常重启后恢复连接和偏好。旧版需要手动替换一次应用；验收使用不同的应用标识和合成服务。

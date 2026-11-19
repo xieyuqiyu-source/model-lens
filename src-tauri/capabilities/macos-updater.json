@@ -1,0 +1,7 @@
+{
+  "identifier": "macos-updater",
+  "description": "Mac 主窗口可以检查已签名的应用更新",
+  "platforms": ["macOS"],
+  "windows": ["main"],
+  "permissions": ["updater:allow-check"]
+}

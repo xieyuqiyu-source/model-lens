@@ -1,4 +1,6 @@
 pub mod access;
+#[cfg(target_os = "macos")]
+pub mod app_update;
 pub mod batch;
 pub mod cpa;
 pub mod groups;

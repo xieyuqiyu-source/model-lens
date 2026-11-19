@@ -4,9 +4,9 @@
 
 ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目录、比较采样结果和管理凭证，也可以从菜单栏快速确认各账号的额度与状态。应用使用 **Tauri 2 + Rust + React + TypeScript**，凭证操作由 Rust 后端处理，前端负责展示与交互。
 
-**当前版本：0.2.31 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
+**当前发布版本：Apple Silicon Mac 0.2.32 · Windows x64 0.2.31 · 公开源码仓库**
 
-[快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.31.md)
+[快速开始](#快速开始) · [Mac 应用更新](#mac-应用更新) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.32.md)
 
 ## 界面预览
 
@@ -48,16 +48,16 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 
 ## 当前交付范围
 
-- **macOS**：Apple Silicon，构建目标最低 macOS 13。安装包为本地 ad-hoc 签名。
+- **macOS**：Apple Silicon，构建目标最低 macOS 13。支持签名应用更新。应用 bundle 使用 ad-hoc 代码签名，未做 Apple 公证。
 - **Windows**：x64，使用 WebView2。支持模型探查、凭证管理，以及 CLIProxy 本机发现、官方源码安装、启停、版本检查和更新重启。下载和配置见 [Windows 安装与更新](windows/README.md)。
-- **后续范围**：Intel Mac、Windows ARM64、macOS 应用自动更新。
+- **后续范围**：Intel Mac、Windows ARM64。
 - **兼容性边界**：浏览器与合成 HTTP 测试已覆盖主要流程，不等同于所有厂商真实账号均已实测。
 
 ## 快速开始
 
 ### 1. 安装
 
-Windows 用户可从 [Windows 安装与更新](windows/README.md) 下载 x64 安装包。下方从源码构建命令适用于 Apple Silicon Mac。
+Apple Silicon Mac 用户可[下载 0.2.32 应用归档](https://www.ccoos.cn/modellens/macos/releases/0.2.32/ModelLens_0.2.32_aarch64.app.tar.gz)，解压后将 `ModelLens.app` 复制到个人「应用程序」目录。Windows 下载见 [Windows 安装与更新](windows/README.md)。
 
 准备 Xcode Command Line Tools、Node.js 24、pnpm 10.10.0 和 Rust 1.89。当前项目使用锁文件固定依赖。
 
@@ -69,6 +69,24 @@ pnpm package
 ```
 
 构建后的应用位于 `src-tauri/target/release/bundle/macos/ModelLens.app`。复制到自己的“应用程序”目录后打开；打包版已包含前端资源，不需要另开 Node.js 服务。
+
+#### Mac 应用更新
+
+0.2.32 起，应用在启动时和运行期间每 6 小时检查更新。发现新版后，主窗口顶部出现下载图标，也可在「外观与连接设置」点「检查应用更新」。点击「安装并重启」后，应用从「超级 Linux」下载并验证签名，替换应用后重启，保留本地连接和偏好。0.2.31 及以下需先手动替换一次应用。[更新源](https://www.ccoos.cn/modellens/macos/latest.json) · [SHA-256](https://www.ccoos.cn/modellens/macos/releases/0.2.32/SHA256SUMS)
+
+Mac 发布使用本机 Apple Silicon 打包。校验应用签名后，从其父目录归档 `ModelLens.app`，并在持有 Mac 更新密钥的机器上签名与上传。将 `TAURI_SIGNING_PRIVATE_KEY_PATH` 设为 Mac 更新私钥路径。发布脚本需要 Python 3.11+、pnpm 和服务器 SSH 权限。
+
+```sh
+pnpm package
+codesign --verify --deep --strict src-tauri/target/release/bundle/macos/ModelLens.app
+release_version=0.2.32
+release_dir="release/artifacts/macos/$release_version"
+archive="$release_dir/ModelLens_${release_version}_aarch64.app.tar.gz"
+mkdir -p "$release_dir"
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$archive" \
+  -C src-tauri/target/release/bundle/macos ModelLens.app
+python3 release/publish.py "$archive" --notes "本版本更新说明"
+```
 
 ### 2. 连接本机 CLIProxy
 

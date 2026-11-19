@@ -23,7 +23,7 @@ import { useProbe } from "./features/probe/useProbe";
 import { ProbeHistory } from "./features/probe/ProbeHistory";
 import { openMain, openTray, closeTray, native } from "./features/service/api";
 import { windowsDesktop } from "../windows/platform";
-import { UpdateNotice, useWindowsUpdate } from "../windows/UpdateNotice";
+import { UpdateNotice, useAppUpdate } from "./features/update/UpdateNotice";
 function readPreference(key: string, fallback: string) {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -69,7 +69,9 @@ export default function App() {
   const accountProbe = useAccountProbe(credentials, probe.external ? "" : probe.model?.id ?? "", setToast, runId => { setAccountHistoryId(runId); setModal("history"); });
   const isTray =
     new URLSearchParams(window.location.search).get("view") === "tray";
-  const appUpdate = useWindowsUpdate(windowsDesktop && !isTray);
+  const macDesktop = native && import.meta.env.PROD && /Macintosh/.test(navigator.userAgent);
+  const canUpdate = !isTray && (windowsDesktop || macDesktop);
+  const appUpdate = useAppUpdate(canUpdate, macDesktop);
   useEffect(() => {
     if (!isTray) return;
     const dismiss = (event: KeyboardEvent) => {
@@ -228,8 +230,8 @@ export default function App() {
           </main>
         </>
       )}
-      {modal === "appearance" && <Appearance {...appearance} compact={isTray} onClose={() => setModal("")} onConnect={() => setModal("connection")}>
-        {windowsDesktop && !isTray && <UpdateNotice update={appUpdate} appBusy={credentials.busy || probe.busy || accountProbe.activeCount > 0} />}
+      {modal === "appearance" && <Appearance {...appearance} compact={isTray} updating={macDesktop && appUpdate.status === "installing"} onClose={() => setModal("")} onConnect={() => setModal("connection")}>
+        {canUpdate && <UpdateNotice update={appUpdate} appBusy={credentials.busy || probe.busy || accountProbe.activeCount > 0} />}
       </Appearance>}
       {modal === "connection" && (
         <Connection

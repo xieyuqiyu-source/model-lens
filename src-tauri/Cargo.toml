@@ -1,6 +1,6 @@
 [package]
 name = "model-lens"
-version = "0.2.31"
+version = "0.2.32"
 edition = "2021"
 rust-version = "1.89"
 
@@ -23,6 +23,7 @@ sha2 = "0.10.9"
 chrono = { version = "0.4", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-updater = "=2.12.0"
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSOpenPanel", "NSSavePanel", "NSPanel", "NSWindow", "NSResponder", "NSApplication"] }
 

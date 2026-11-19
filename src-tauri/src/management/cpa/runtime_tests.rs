@@ -30,7 +30,9 @@ drop(listener);std::thread::sleep(Duration::from_millis(800));}"#).unwrap();
     let port = loop {
         let candidate = NEXT_PORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         assert!(candidate < 30000);
-        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+        if listeners(candidate).is_ok_and(|pids| pids.is_empty())
+            && TcpListener::bind(("127.0.0.1", candidate)).is_ok()
+        {
             break candidate;
         }
     };

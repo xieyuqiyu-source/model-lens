@@ -106,12 +106,14 @@ fn main() {
         tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)
         }));
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .manage(management::Management::default())
         .manage(reference_bank::BankState::default())
         .invoke_handler(tauri::generate_handler![
+            #[cfg(target_os = "macos")]
+            management::app_update::install_macos_update,
             discover_services,
             set_appearance,
             open_main,
@@ -224,6 +226,12 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("ModelLens 启动失败")
         .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::ExitRequested { code, ref api, .. } = _event {
+                if code != Some(tauri::RESTART_EXIT_CODE) && management::app_update::replacing() {
+                    api.prevent_exit();
+                }
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {
                 has_visible_windows: false,
