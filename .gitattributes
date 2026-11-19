@@ -1,0 +1,2 @@
+# Fingerprint snapshots are verified against upstream byte hashes.
+src/features/probe/vendor/** -text

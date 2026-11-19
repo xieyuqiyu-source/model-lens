@@ -27,15 +27,18 @@ def promote(stage, version, installer):
     info = json.loads(manifest)
     if info["version"] != version or info["platforms"]["windows-x86_64"]["signature"] != (stage / signature).read_text().strip():
         raise ValueError("暂存更新清单与安装包签名不一致")
-    subprocess.run(["sha256sum", "-c", "--strict", "SHA256SUMS"], cwd=stage, check=True)
+    subprocess.run(["sha256sum", "-c", "--strict", "SHA256SUMS"], cwd=stage, check=True, stdout=subprocess.DEVNULL)
 
     with open("/run/lock/modellens-windows.lock", "a", encoding="ascii") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if current.exists() and semver(json.loads(current.read_text())["version"]) > target:
             raise ValueError("发布版本低于线上版本")
         if destination.exists():
-            if not all((stage / file).read_bytes() == (destination / file).read_bytes() for file in assets):
+            if (stage / installer).read_bytes() != (destination / installer).read_bytes():
                 raise ValueError("同版本安装包已存在，请增加版本号")
+            # A retry can produce a new signature timestamp. The published assets stay immutable.
+            info["platforms"]["windows-x86_64"]["signature"] = (destination / signature).read_text().strip()
+            manifest = (json.dumps(info, ensure_ascii=False, indent=2) + "\n").encode()
         else:
             release = stage / "release"
             release.mkdir(mode=0o755)
@@ -53,6 +56,7 @@ def promote(stage, version, installer):
             finally:
                 Path(new.name).unlink(missing_ok=True)
     shutil.rmtree(stage)
+    return manifest
 
 
 if __name__ == "__main__":
@@ -62,4 +66,4 @@ if __name__ == "__main__":
     semver(version)
     if installer != f"ModelLens_{version}_x64-setup.exe":
         raise ValueError("暂存安装包名称无效")
-    promote(Path(stage), version, installer)
+    sys.stdout.buffer.write(promote(Path(stage), version, installer))

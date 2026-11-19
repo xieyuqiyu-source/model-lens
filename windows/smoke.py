@@ -1,6 +1,7 @@
 """Install and run the Windows package on a disposable Windows runner."""
 
 import argparse
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -36,6 +37,29 @@ class MockCpa(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+
+@contextmanager
+def webview_debug_port(port):
+    import winreg
+
+    policy = r"Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+    executable = "model-lens.exe"
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, policy, access=winreg.KEY_READ | winreg.KEY_WRITE) as key:
+        try:
+            previous = winreg.QueryValueEx(key, executable)
+        except FileNotFoundError:
+            previous = None
+        # NSIS can restart from a different process environment after installing.
+        winreg.SetValueEx(key, executable, 0, winreg.REG_SZ, f"--remote-debugging-port={port}")
+        try:
+            yield
+        finally:
+            if previous:
+                value, kind = previous
+                winreg.SetValueEx(key, executable, 0, kind, value)
+            else:
+                winreg.DeleteValue(key, executable)
 
 
 def version(page):
@@ -99,7 +123,7 @@ def main(installer, expected_update):
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={port}"
     endpoint = f"http://127.0.0.1:{port}"
 
-    with ThreadingHTTPServer(("127.0.0.1", 0), MockCpa) as server, sync_playwright() as playwright:
+    with webview_debug_port(port), ThreadingHTTPServer(("127.0.0.1", 0), MockCpa) as server, sync_playwright() as playwright:
         Thread(target=server.serve_forever, daemon=True).start()
         process = subprocess.Popen([str(executable)])
         try:

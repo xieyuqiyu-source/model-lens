@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, codex/windows]
     paths:
+      - '.gitattributes'
       - '.github/workflows/windows.yml'
       - 'windows/**'
       - 'src/**'
@@ -47,9 +48,17 @@ jobs:
           rustup override set 1.89.0
           rustup target add x86_64-pc-windows-msvc
           pnpm install --frozen-lockfile
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            windows/target
+          key: windows-x64-rust-1.89-${{ hashFiles('src-tauri/Cargo.lock') }}
       - name: Build Windows NSIS installer
+        if: ${{ !inputs.verify_update }}
         run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-pc-windows-msvc --config windows/tauri.conf.json -- --locked
       - name: Run Windows unit tests
+        if: ${{ !inputs.verify_update }}
         run: |
           $env:TAURI_CONFIG = Get-Content windows/tauri.conf.json -Raw
           cargo test --locked --release --features tauri/custom-protocol --target x86_64-pc-windows-msvc --manifest-path src-tauri/Cargo.toml
@@ -66,6 +75,7 @@ jobs:
         if: ${{ inputs.verify_update }}
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force windows/target | Out-Null
           '{"version":"0.0.0"}' | Set-Content windows/target/smoke-version.json -Encoding ascii
           node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-pc-windows-msvc --config windows/tauri.conf.json --config windows/target/smoke-version.json -- --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
