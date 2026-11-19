@@ -163,10 +163,18 @@ def verify_service(page, root, upstream, source):
     with urlopen(url, timeout=2) as response:
         assert response.read() == b"first"
 
+    executable = install_path / ".dev" / "cli-proxy-api.exe"
+    snapshot = page.evaluate("() => window.__TAURI_INTERNALS__.invoke('discover_services')")
+    print("CPA discovery:", snapshot, flush=True)
+    location = dialog.locator(".service-location").filter(has=page.get_by_label(f"CPA 地址：{executable}", exact=True))
+    expect(location).to_have_count(1, timeout=10000)
+    if dialog.get_by_role("radio").count():
+        location.get_by_role("radio").check()
+
     source.write_text(source.read_text().replace('"first"', '"second"'), encoding="utf-8")
     git_fixture(upstream, "add", ".")
     git_fixture(upstream, "commit", "-m", "second")
-    versions = dialog.get_by_role("region", name="CPA 版本")
+    versions = dialog.locator(".cpa-versions")
     versions.get_by_role("button", name="检查 CPA 版本").click()
     expect(versions.get_by_text("有更新 · 落后 1 个提交", exact=True)).to_be_visible(timeout=20000)
     versions.get_by_role("button", name="更新并重启", exact=True).click()
@@ -175,6 +183,19 @@ def verify_service(page, root, upstream, source):
         assert response.read() == b"second"
     signal_file = install_path / ".dev" / "graceful-stop"
     assert signal_file.read_text() == "first"
+
+    saved_config = install_path / ".dev" / "config.yaml"
+    config_before = saved_config.read_bytes()
+    source.write_text(source.read_text().replace('"second"', '"unstartable"'), encoding="utf-8")
+    git_fixture(upstream, "add", ".")
+    git_fixture(upstream, "commit", "-m", "unstartable")
+    versions.get_by_role("button", name="检查 CPA 版本").click()
+    expect(versions.get_by_text("有更新 · 落后 1 个提交", exact=True)).to_be_visible(timeout=20000)
+    versions.get_by_role("button", name="更新并重启", exact=True).click()
+    expect(dialog.get_by_text("已恢复原程序与配置并重新启动", exact=False).filter(visible=True).first).to_be_visible(timeout=90000)
+    assert saved_config.read_bytes() == config_before
+    with urlopen(url, timeout=2) as response:
+        assert response.read() == b"second"
 
     dialog.get_by_role("button", name="关闭 CPA", exact=True).click()
     expect(dialog.get_by_role("button", name="启动 CPA", exact=True)).to_be_enabled(timeout=25000)
@@ -186,7 +207,7 @@ def verify_service(page, root, upstream, source):
     dialog.get_by_role("button", name="关闭 CPA", exact=True).click()
     expect(dialog.get_by_role("button", name="启动 CPA", exact=True)).to_be_enabled(timeout=25000)
     dialog.get_by_role("button", name="关闭", exact=True).click()
-    print("Windows 源码克隆、编译、管理连接、版本检查、更新重启和正常启停通过。", flush=True)
+    print("Windows 源码克隆、编译、管理连接、版本检查、更新重启、失败恢复和正常启停通过。", flush=True)
 
 
 def main(installer, expected_update):

@@ -199,12 +199,9 @@ pub(super) fn install(app: &tauri::AppHandle, value: &str, port: u16) -> Result<
     #[cfg(target_os = "macos")]
     fs::set_permissions(staged.path(), fs::Permissions::from_mode(0o700))
         .map_err(|_| "无法保护安装目录")?;
-    #[cfg(target_os = "macos")]
     let executable = target
         .join(".dev")
         .join(layout.executable.file_name().ok_or("安装路径无效")?);
-    #[cfg(windows)]
-    let executable = target.join(".dev/cli-proxy-api.exe");
     #[cfg(target_os = "macos")]
     crate::discovery::remember_install(&data, &executable)?;
     if !promote(staged.path(), &target)? {

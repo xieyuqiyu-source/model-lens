@@ -16,6 +16,9 @@ import (
 const revision = "first"
 
 func main() {
+	if revision == "unstartable" {
+		return
+	}
 	config := flag.String("config", "", "")
 	flag.Parse()
 	data, err := os.ReadFile(*config)

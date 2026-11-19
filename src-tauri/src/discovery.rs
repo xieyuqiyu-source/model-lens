@@ -236,7 +236,10 @@ fn merge(remembered: Vec<Remembered>, live: &[(u32, Remembered)]) -> Vec<Service
         }
     }
     for r in remembered {
-        if !live.iter().any(|(_, l)| l.executable == r.executable) {
+        if !services
+            .iter()
+            .any(|s| s.location.executable == r.executable)
+        {
             services.push(Service {
                 externally_managed: externally_managed(&r.executable),
                 location: r,
@@ -251,6 +254,9 @@ pub(crate) fn remember_install(data: &Path, executable: &Path) -> Result<(), Str
     let _cache = CACHE_ACCESS.lock().map_err(|_| "服务位置暂时不可用")?;
     let path = data.join("discovery.json");
     let mut records = read_cache(&path)?;
+    #[cfg(windows)]
+    let executable =
+        crate::windows::cpa::canonical(executable).map_err(|_| "无法核实新安装的程序路径")?;
     let executable = executable.to_string_lossy().into_owned();
     if !records.iter().any(|r| r.executable == executable) {
         records.push(Remembered {
@@ -294,7 +300,18 @@ pub fn scan(data_dir: PathBuf) -> Result<Snapshot, String> {
     #[cfg(windows)]
     let remembered = {
         let mut remembered = remembered;
-        remembered.retain(|record| Path::new(&record.executable).is_file());
+        remembered.retain_mut(|record| {
+            let Ok(executable) = crate::windows::cpa::canonical(Path::new(&record.executable))
+            else {
+                return false;
+            };
+            if !executable.is_file() {
+                return false;
+            }
+            record.executable = executable.to_string_lossy().into_owned();
+            record.directory = project_directory(&record.executable);
+            true
+        });
         for candidate in crate::windows::cpa::disk_candidates() {
             if let Ok(path) = crate::windows::cpa::canonical(&candidate) {
                 let executable = path.to_string_lossy().into_owned();
