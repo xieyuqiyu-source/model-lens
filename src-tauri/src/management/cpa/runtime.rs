@@ -50,6 +50,10 @@ impl Layout {
             return Err("此 CPA 由其他应用托管，请在原应用管理".into());
         }
         let directory = executable.parent().ok_or("CPA 路径无效")?.to_path_buf();
+        #[cfg(windows)]
+        if !crate::windows::cpa::local_volume(&directory) {
+            return Err("请在本机磁盘启动 CPA".into());
+        }
         let config = directory.join("config.yaml");
         if !regular_file(&config) {
             return Err("未找到同目录 config.yaml，无法安全启动".into());
@@ -331,7 +335,9 @@ pub(super) fn launch(layout: &Layout) -> Result<(), String> {
                 #[cfg(target_os = "macos")]
                 terminate_child(&mut child);
                 #[cfg(windows)]
-                child.terminate_own_child();
+                if !child.terminate_own_child() {
+                    return Err("CPA 进程状态不可用，无法确认新进程已退出".into());
+                }
                 return Err("CPA 进程状态不可用，已停止本次新进程".into());
             }
             Ok(false) => {}
@@ -353,7 +359,9 @@ pub(super) fn launch(layout: &Layout) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     terminate_child(&mut child);
     #[cfg(windows)]
-    child.terminate_own_child();
+    if !child.terminate_own_child() {
+        return Err("CPA 启动检查超时，无法确认新进程已退出".into());
+    }
     Err("CPA 启动检查超时，已停止本次新进程".into())
 }
 pub(super) fn set_running(

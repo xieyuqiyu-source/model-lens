@@ -4,7 +4,7 @@
 
 ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目录、比较采样结果和管理凭证，也可以从菜单栏快速确认各账号的额度与状态。应用使用 **Tauri 2 + Rust + React + TypeScript**，凭证操作由 Rust 后端处理，前端负责展示与交互。
 
-**当前版本：0.2.30 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
+**当前版本：0.2.31 · Apple Silicon Mac / Windows x64 · 公开源码仓库**
 
 [快速开始](#快速开始) · [Windows 安装与更新](windows/README.md) · [界面预览](#界面预览) · [开发与验证](#开发与验证) · [完整使用说明](docs/usage.md) · [最新验证记录](docs/verification-0.2.30.md)
 
@@ -49,8 +49,8 @@ ModelLens 面向使用 **CLIProxy** 的开发者：在主窗口查看模型目�
 ## 当前交付范围
 
 - **macOS**：Apple Silicon，构建目标最低 macOS 13。安装包为本地 ad-hoc 签名。
-- **Windows**：x64，使用 WebView2。支持连接已运行的 CLIProxy、探查与凭证管理。安装包通过 HTTPS 发布，应用更新通过 Tauri 签名验证。
-- **后续范围**：Intel Mac、Windows ARM64、Windows 上的 CPA 自动发现和进程管理、macOS 应用自动更新。
+- **Windows**：x64，使用 WebView2。支持模型探查、凭证管理，以及 CLIProxy 本机发现、官方源码安装、启停、版本检查和更新重启。下载和配置见 [Windows 安装与更新](windows/README.md)。
+- **后续范围**：Intel Mac、Windows ARM64、macOS 应用自动更新。
 - **兼容性边界**：浏览器与合成 HTTP 测试已覆盖主要流程，不等同于所有厂商真实账号均已实测。
 
 ## 快速开始

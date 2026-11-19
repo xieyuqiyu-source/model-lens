@@ -25,11 +25,11 @@ use windows_sys::Win32::{
         GetSecurityDescriptorDacl, GetTokenInformation, TokenUser, DACL_SECURITY_INFORMATION,
         PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
     },
-    Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives, MoveFileW},
+    Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives, GetVolumePathNameW, MoveFileW},
     System::{
         Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED},
         Threading::{GetCurrentProcess, OpenProcessToken},
-        WindowsProgramming::DRIVE_FIXED,
+        WindowsProgramming::{DRIVE_FIXED, DRIVE_RAMDISK, DRIVE_REMOVABLE},
     },
     UI::{
         Shell::{
@@ -46,6 +46,18 @@ fn wide(value: impl AsRef<OsStr>) -> Vec<u16> {
 
 pub(crate) fn canonical(path: &Path) -> io::Result<PathBuf> {
     dunce::canonicalize(path)
+}
+
+pub(crate) fn local_volume(path: &Path) -> bool {
+    let mut root = vec![0; 32768];
+    if unsafe { GetVolumePathNameW(wide(path).as_ptr(), root.as_mut_ptr(), root.len() as u32) } == 0
+    {
+        return false;
+    }
+    matches!(
+        unsafe { GetDriveTypeW(root.as_ptr()) },
+        DRIVE_FIXED | DRIVE_RAMDISK | DRIVE_REMOVABLE
+    )
 }
 
 pub(crate) fn externally_managed(path: &Path) -> bool {
@@ -272,6 +284,12 @@ pub(crate) fn random(bytes: &mut [u8]) -> io::Result<()> {
 
 pub(crate) fn private_directory(path: &Path) -> io::Result<()> {
     use std::os::windows::io::AsRawHandle;
+    if !local_volume(path) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Local volume required",
+        ));
+    }
     let mut raw_token = null_mut();
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw_token) } == 0 {
         return Err(io::Error::last_os_error());
@@ -348,4 +366,25 @@ pub(crate) fn private_directory(path: &Path) -> io::Result<()> {
 
 pub(crate) fn promote(from: &Path, to: &Path) -> bool {
     unsafe { MoveFileW(wide(from).as_ptr(), wide(to).as_ptr()) != 0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discovers_loopback_port_owner_and_protects_sidecars() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert_eq!(listeners(port).unwrap(), vec![std::process::id()]);
+        assert!(externally_managed(Path::new(
+            "L:/CPSwitch/resources/sidecar/windows-x86_64/cliproxyapi.exe"
+        )));
+        assert!(externally_managed(Path::new(
+            "M:/EasyCLIProxyAPI/cpa-core/cli-proxy-api.exe"
+        )));
+        assert!(!externally_managed(Path::new(
+            "M:/CLIProxy/.dev/cli-proxy-api.exe"
+        )));
+    }
 }

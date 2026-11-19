@@ -1,6 +1,7 @@
 use std::{
     io::Read,
     process::{Command, Stdio},
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -24,18 +25,24 @@ pub(super) fn output(mut command: Command, timeout: Duration) -> Result<String, 
         .spawn()
         .map_err(|_| "无法启动命令，请检查 Git / Go 命令行工具")?;
     #[cfg(windows)]
-    let job = crate::windows::cpa::attach_job(&child).map_err(|_| {
-        let _ = child.kill();
-        let _ = child.wait();
-        "无法跟踪 Git / Go 进程，已停止该命令"
-    })?;
+    let job = match crate::windows::cpa::attach_job(&child) {
+        Ok(job) => Some(job),
+        Err(_) if child.try_wait().ok().flatten().is_some() => None,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("无法跟踪 Git / Go 进程，已停止该命令".into());
+        }
+    };
     let stdout = child.stdout.take().ok_or("无法读取命令状态")?;
-    let reader = thread::spawn(move || {
+    let (send, receive) = mpsc::channel();
+    thread::spawn(move || {
         let mut bytes = Vec::new();
-        stdout
+        let result = stdout
             .take(1024 * 1024)
             .read_to_end(&mut bytes)
-            .map(|_| bytes)
+            .map(|_| bytes);
+        let _ = send.send(result);
     });
     let start = Instant::now();
     let status = loop {
@@ -56,11 +63,12 @@ pub(super) fn output(mut command: Command, timeout: Duration) -> Result<String, 
     };
     #[cfg(windows)]
     drop(job);
-    let bytes = reader
-        .join()
-        .map_err(|_| "命令输出读取失败")?
+    let status = status?;
+    let bytes = receive
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| "命令输出读取超时")?
         .map_err(|_| "命令输出读取失败")?;
-    if !status?.success() {
+    if !status.success() {
         return Err("命令执行失败，请检查网络、依赖版本或仓库状态".into());
     }
     String::from_utf8(bytes).map_err(|_| "命令返回无效状态".into())

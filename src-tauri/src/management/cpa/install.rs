@@ -42,7 +42,14 @@ fn destination(value: &str) -> Result<PathBuf, String> {
     #[cfg(windows)]
     let parent = crate::windows::cpa::canonical(parent);
     let parent = parent.map_err(|_| "安装路径的上级目录不存在")?;
-    Ok(parent.join(path.file_name().unwrap()))
+    let destination = parent.join(path.file_name().unwrap());
+    #[cfg(windows)]
+    if !crate::windows::cpa::local_volume(&parent)
+        || crate::windows::cpa::externally_managed(&destination)
+    {
+        return Err("请选择本机磁盘上的新目录，避免使用网络盘或其他应用的托管目录".into());
+    }
+    Ok(destination)
 }
 fn config(port: u16, auth: &Path, key: &str, api_key: &str) -> String {
     format!("config-version: 8\nserver:\n  host: \"127.0.0.1\"\n  port: {port}\nmanagement:\n  allow-remote: false\n  secret-key: {}\n  disable-control-panel: false\n  disable-auto-update-panel: true\naccess:\n  api-keys:\n    - {}\noauth:\n  auth-dir: {}\n",serde_json::to_string(key).unwrap(),serde_json::to_string(api_key).unwrap(),serde_json::to_string(&auth.to_string_lossy()).unwrap())

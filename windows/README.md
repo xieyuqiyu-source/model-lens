@@ -4,13 +4,23 @@
 
 ## 安装与使用
 
-1. 下载并运行 [ModelLens 0.2.30 Windows x64 安装包](https://www.ccoos.cn/modellens/windows/releases/0.2.30/ModelLens_0.2.30_x64-setup.exe)。安装程序会检查 Microsoft Edge WebView2 Runtime，有需要时联网安装。
-2. 需要 CLIProxy 时，先在 Windows 上启动它，在 ModelLens 点击「连接 CLIProxy」，填写本机管理端口和管理密钥。第三方 API 和手动检测可独立使用。
+1. 下载并运行 [ModelLens 0.2.31 Windows x64 安装包](https://www.ccoos.cn/modellens/windows/releases/0.2.31/ModelLens_0.2.31_x64-setup.exe)。安装程序会检查 Microsoft Edge WebView2 Runtime，有需要时联网安装。
+2. 点击主窗口顶部的 CLIProxy 状态进入本机服务面板。可以安装官方源码，或通过「管理连接」连接已在本机运行的 CLIProxy。第三方 API 和手动检测可独立使用。
 3. 点击任务栏通知区域的 ModelLens 图标查看额度和快捷探查。右键菜单可打开主窗口或退出应用。
 
-Windows 版包括模型探查、指纹库更新、凭证管理、额度与外观设置。CPA 的本机进程发现、安装、启停与更新需要独立操作。管理连接和第三方 API 记录保存到 `%LOCALAPPDATA%\io.modellens.desktop`。
+Windows 版包括模型探查、指纹库更新、凭证管理、额度与外观设置。管理连接和第三方 API 记录保存到 `%LOCALAPPDATA%\io.modellens.desktop`。
 
-安装包有用于应用内自动更新的 Tauri 签名。首次运行安装程序时，Windows 可能显示 SmartScreen 提示，因为安装包当前没有 Authenticode 签名。可核对 [SHA-256](https://www.ccoos.cn/modellens/windows/releases/0.2.30/SHA256SUMS)。
+安装包有用于应用内自动更新的 Tauri 签名。首次运行安装程序时，Windows 可能显示 SmartScreen 提示，因为安装包当前没有 Authenticode 签名。可核对 [SHA-256](https://www.ccoos.cn/modellens/windows/releases/0.2.31/SHA256SUMS)。
+
+## 安装和管理 CLIProxy
+
+1. 安装 Git for Windows 和 Go 1.26 或更新版本，然后重新打开 ModelLens。
+2. 打开「本机 CLIProxy」并点击「安装 CLIProxy」。可以直接填写一个尚不存在的本机目录，或选择其上级目录，让应用追加 `CLIProxy`。例如选择 `D:\Tools` 会安装到 `D:\Tools\CLIProxy`。
+3. 选择要监听的本机端口（默认 `8317`），点击「安装并启动」。应用克隆 router-for-me 的官方仓库，用 Go 编译，然后生成仅监听回环地址的配置、启动并保存管理连接。
+
+源码克隆到 `<安装目录>\CLIProxyApi`，运行程序和配置分别是 `<安装目录>\.dev\cli-proxy-api.exe` 与 `<安装目录>\.dev\config.yaml`。安装目录和配置备份使用 Windows ACL 保护。保留已存在的目录；安装新实例时需要选择未占用的端口。
+
+本机服务面板显示识别到的进程、已记住的位置，以及本机磁盘常见目录和 PATH 中找到的程序。CPSwitch 和 EasyCLIProxyAPI 附带的 CLIProxy 会标记为由其他应用托管。在本机服务面板可以选择 ModelLens 安装的实例启停、比较编译程序和源码与跟踪分支的版本，或点「更新并重启」。更新仅允许 Git 快进，编译成功后才发送正常关闭信号，启动失败尝试恢复旧版本。共享控制台中的 CPA 由原启动入口关闭。CLIProxy 更新与 ModelLens 自身更新各自在对应入口操作。
 
 ## 应用自动更新
 

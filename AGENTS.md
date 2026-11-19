@@ -148,3 +148,9 @@
 - Windows 连接已独立运行的本机 CLIProxy，沿用模型探查、指纹库、凭证和额度逻辑。原生窗口与系统托盘适配 Windows，本机 CPA 进程发现、安装、启停和更新保留在 macOS。
 - Windows 管理密钥与第三方 API 缓存在 `%LOCALAPPDATA%\io.modellens.desktop`，由当前用户目录权限保护。复制 API Key 由 Rust 写入剪贴板，排除该条目的 Windows 剪贴板历史和云同步。
 - 客户端启动及运行期间自动检查应用更新，用户确认后下载、验签、安装并重启。线上安装包与清单发布到「超级 Linux」的 HTTPS 静态目录。更新私钥只在本机签名时使用，GitHub Actions 仅构建并验收安装包。交付流程见 `windows/README.md`。
+
+## 0.2.31 Windows CLIProxy 管理
+
+- Windows 共用 macOS 的服务面板、任务互斥、版本与 Git 快进更新，原生实现放在 `windows/cpa.rs` 和 `windows/cpa_process.rs`。用户选择安装上级目录或手填新路径，固定克隆官方仓库到 `<安装目录>\CLIProxyApi`，程序位于 `<安装目录>\.dev\cli-proxy-api.exe`。
+- 安装配置和备份仅写本机磁盘，Windows ACL 限制为当前用户与 SYSTEM。发现已有独立目录或外部托管实例后仍可显式安装到独立新目录和空闲端口。CPSwitch、EasyCLIProxyAPI 的内置程序只发现，保留其运行控制。
+- 退出必须核对进程句柄、可执行路径、端口和私有控制台。同一路径有多个进程、共享控制台或不明归属时保留进程。Windows 开发验收使用合成 Git 仓库、Go 程序与管理接口。

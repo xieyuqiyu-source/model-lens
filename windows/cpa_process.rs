@@ -75,9 +75,9 @@ impl CpaProcess {
         }
     }
 
-    pub(crate) fn terminate_own_child(&self) {
+    pub(crate) fn terminate_own_child(&self) -> bool {
         unsafe { TerminateProcess(self.process.as_raw_handle(), 1) };
-        let _ = self.exited(3000);
+        self.exited(3000).unwrap_or(false)
     }
 
     fn executable(&self) -> io::Result<PathBuf> {
